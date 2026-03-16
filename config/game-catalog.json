@@ -178,5 +178,11 @@
     "author": "Splapp-me-do",
     "image": "images/game-img/the-impossible-quiz.png",
     "category": "swf"
+  },
+  "games/rpg/thats-not-my-neighbor.html": {
+    "title": "That's Not My Neighbor",
+    "author": "Nacho Games",
+    "image": "images/game-img/thats-not-my-neighbor.jpg",
+    "category": "rpg"
   }
 }
