@@ -57,6 +57,16 @@ function normalizeBaseUrl(rawValue) {
   }
 }
 
+const DEFAULT_APPS_BASES = [
+  "http://127.0.0.1:8080",
+  "http://127.0.0.1:443",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:5000",
+  "http://localhost:8080",
+  "http://localhost:443",
+  "http://localhost:3000",
+];
+
 function resolveAppsBases() {
   const candidates = [
     process.env.PALLADIUM_APPS_URL,
@@ -68,11 +78,19 @@ function resolveAppsBases() {
     "https://127.0.0.1:443",
     "https://localhost:443",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5000",
+    "http://localhost:8080",
+    "http://localhost:3000",
   ]
     .map(normalizeBaseUrl)
     .filter(Boolean);
 
-  return unique(candidates);
+  const bases = unique(candidates);
+  if (bases.length === 0) {
+    return unique(DEFAULT_APPS_BASES.map(normalizeBaseUrl).filter(Boolean));
+  }
+  return bases;
 }
 
 const APPS_BASES = resolveAppsBases();
@@ -437,20 +455,35 @@ function buildSavedLinkPayload(entry, totalLinks) {
   };
 }
 
+function createTimeoutSignal(ms) {
+  if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) {
+    return { signal: AbortSignal.timeout(ms), cleanup: () => {} };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timer),
+  };
+}
+
 async function runLinkCheck(url) {
   const errors = [];
+  const timeoutMs = 20_000;
 
   for (const base of APPS_BASES) {
     const endpoint = `${base}/link-check?url=${encodeURIComponent(url)}`;
+    const { signal, cleanup } = createTimeoutSignal(timeoutMs);
 
     try {
-      const response = await fetch(endpoint, { method: "GET", signal: AbortSignal.timeout(20_000) });
+      const response = await fetch(endpoint, { method: "GET", signal });
       let data = {};
       try {
         data = await response.json();
       } catch {
         data = {};
       }
+      cleanup();
 
       if (!response.ok || !data || data.ok !== true) {
         errors.push(`${base}: ${(data && data.error) || `HTTP ${response.status}`}`);
@@ -459,6 +492,7 @@ async function runLinkCheck(url) {
 
       return data;
     } catch (error) {
+      cleanup();
       const msg = error && error.message ? error.message : String(error);
       errors.push(`${base}: ${msg}`);
     }

@@ -1976,7 +1976,14 @@ async function runLinkCheck(targetUrl, timeoutMs) {
       };
     }
 
-    const matched = provider.signatures.find((signature) => signature.test(haystack));
+    let matched = null;
+    try {
+      matched = Array.isArray(provider.signatures)
+        ? provider.signatures.find((sig) => sig && typeof sig.test === "function" && sig.test(haystack))
+        : null;
+    } catch {
+      matched = null;
+    }
     if (matched) {
       blockedCount += 1;
       return {
@@ -2102,12 +2109,14 @@ const GAME_SAVE_BRIDGE_SCRIPT = `
 (function(){
   var store = {};
   var syncTimeout;
+  var proxyInstalled = false;
   function snapshot() {
     var out = {};
     for (var k in store) if (Object.prototype.hasOwnProperty.call(store, k)) out[k] = store[k];
     return out;
   }
   function sendSync() {
+    if (!proxyInstalled) return;
     if (syncTimeout) clearTimeout(syncTimeout);
     syncTimeout = setTimeout(function() {
       syncTimeout = null;
@@ -2115,28 +2124,40 @@ const GAME_SAVE_BRIDGE_SCRIPT = `
       try { window.parent && window.parent !== window && window.parent.postMessage({ type: 'palladium-save-sync', data: snapshot() }, '*'); } catch (e) {}
     }, 150);
   }
+  function installProxy() {
+    if (proxyInstalled) return;
+    proxyInstalled = true;
+    var proto = Object.create(null);
+    proto.getItem = function(key) { return store.hasOwnProperty(key) ? store[key] : null; };
+    proto.setItem = function(key, val) { store[String(key)] = String(val); sendSync(); };
+    proto.removeItem = function(key) { delete store[key]; sendSync(); };
+    proto.clear = function() { store = {}; sendSync(); };
+    proto.key = function(i) { var keys = Object.keys(store); return keys[i] || null; };
+    Object.defineProperty(proto, 'length', { get: function() { return Object.keys(store).length; }, configurable: true });
+    try {
+      var wrap = { __store: store, getItem: proto.getItem, setItem: proto.setItem, removeItem: proto.removeItem, clear: proto.clear, key: proto.key, length: 0 };
+      Object.defineProperty(wrap, 'length', { get: function() { return Object.keys(this.__store).length; }, configurable: true });
+      Object.defineProperty(window, 'localStorage', { value: wrap, configurable: true, writable: true });
+    } catch (e) {}
+  }
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'palladium-save-load' && e.data.data && typeof e.data.data === 'object') {
       for (var k in store) delete store[k];
       for (var k in e.data.data) if (Object.prototype.hasOwnProperty.call(e.data.data, k)) store[k] = e.data.data[k];
+      installProxy();
     }
   });
-  try {
-    if (window.opener) window.opener.postMessage({ type: 'palladium-save-ready' }, '*');
-    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'palladium-save-ready' }, '*');
-  } catch (err) {}
-  var proto = Object.create(null);
-  proto.getItem = function(key) { return store.hasOwnProperty(key) ? store[key] : null; };
-  proto.setItem = function(key, val) { store[String(key)] = String(val); sendSync(); };
-  proto.removeItem = function(key) { delete store[key]; sendSync(); };
-  proto.clear = function() { store = {}; sendSync(); };
-  proto.key = function(i) { var keys = Object.keys(store); return keys[i] || null; };
-  Object.defineProperty(proto, 'length', { get: function() { return Object.keys(store).length; }, configurable: true });
-  try {
-    var wrap = { __store: store, getItem: proto.getItem, setItem: proto.setItem, removeItem: proto.removeItem, clear: proto.clear, key: proto.key, length: 0 };
-    Object.defineProperty(wrap, 'length', { get: function() { return Object.keys(this.__store).length; }, configurable: true });
-    Object.defineProperty(window, 'localStorage', { value: wrap, configurable: true, writable: true });
-  } catch (e) {}
+  function sendReady() {
+    try {
+      if (window.opener) window.opener.postMessage({ type: 'palladium-save-ready' }, '*');
+      if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'palladium-save-ready' }, '*');
+    } catch (err) {}
+  }
+  sendReady();
+  setTimeout(sendReady, 100);
+  setTimeout(function() {
+    if (!proxyInstalled) installProxy();
+  }, 500);
 })();
 `;
 
