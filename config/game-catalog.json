@@ -17,16 +17,22 @@
     "image": "images/game-img/learn-to-fly3.png",
     "category": "l2f"
   },
-  "games/ragdoll/ragdoll-archers.html": {
+  "games/stick-ragdoll/ragdoll-archers.html": {
     "title": "Ragdoll Archers",
     "author": "Studio Minus",
     "image": "images/game-img/ragdoll-archers.png",
     "category": "ragdoll"
   },
-  "games/ragdoll/ragdoll-hit.html": {
+  "games/stick-ragdoll/ragdoll-hit.html": {
     "title": "Ragdoll Hit",
     "author": "Studio Minus",
     "image": "images/game-img/ragdoll-hit.png",
+    "category": "ragdoll"
+  },
+  "games/stick-ragdoll/stick-war-legacy.html": {
+    "title": "Stick War Legacy",
+    "author": "Max Games Studios",
+    "image": "images/game-img/stick-war-legacy.png",
     "category": "ragdoll"
   },
   "games/fnaf/fnaf-1.html": {
