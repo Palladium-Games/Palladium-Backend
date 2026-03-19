@@ -7,7 +7,12 @@ const BACKEND_ONLY_ROOT = path.resolve(__dirname, "..");
 const HAS_BACKEND_ONLY_LAYOUT = fs.existsSync(path.join(BACKEND_ONLY_ROOT, "apps.js"));
 const REPO_DIR = HAS_BACKEND_ONLY_LAYOUT ? BACKEND_ONLY_ROOT : path.resolve(__dirname, "..", "..");
 const BACKEND_DIR = HAS_BACKEND_ONLY_LAYOUT ? BACKEND_ONLY_ROOT : path.join(REPO_DIR, "backend");
-const FRONTEND_DIR = path.join(REPO_DIR, "frontend");
+const FRONTEND_CANDIDATES = [
+  path.join(REPO_DIR, "frontend"),
+  path.join(REPO_DIR, "palladium-frontend"),
+  path.resolve(BACKEND_DIR, "..", "palladium-frontend")
+];
+const FRONTEND_DIR = FRONTEND_CANDIDATES.find((candidate) => fs.existsSync(path.join(candidate, "index.html"))) || "";
 const HAS_FRONTEND_DIR = fs.existsSync(path.join(FRONTEND_DIR, "index.html"));
 
 const REQUIRED_FRONTEND_FILES = [
@@ -17,6 +22,7 @@ const REQUIRED_FRONTEND_FILES = [
   "games-static.js",
   "shell-core.js",
   "shell.js",
+  "sw.js",
   "site-settings.js",
   "favicon.ico",
   "render.yaml"
@@ -44,6 +50,8 @@ test("frontend shell ships the built-in games search box", () => {
   assert.match(shellPage, /games-search-input/);
   assert.match(shellPage, /Search games, authors, or categories/);
   assert.match(shellPage, /palladium:\/\/games/);
+  assert.match(shellPage, /scram\/scramjet\.all\.js/);
+  assert.match(shellPage, /baremux\/index\.js/);
 });
 
 test("frontend root only keeps one app shell html entrypoint", () => {
@@ -64,7 +72,10 @@ test("frontend directory keeps shared images available for the static host", () 
   if (HAS_FRONTEND_DIR) {
     assert.ok(fs.existsSync(path.join(FRONTEND_DIR, "images", "favicon.png")));
     assert.ok(fs.existsSync(path.join(FRONTEND_DIR, "images", "discord.png")));
-    assert.ok(!fs.existsSync(path.join(FRONTEND_DIR, "images", "game-img")));
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, "images", "game-img")));
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, "scram", "scramjet.all.js")));
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, "baremux", "worker.js")));
+    assert.ok(fs.existsSync(path.join(FRONTEND_DIR, "libcurl", "index.mjs")));
   }
   assert.ok(fs.existsSync(path.join(BACKEND_DIR, "images", "game-img")));
 });

@@ -8,7 +8,7 @@ What it runs:
 - AI APIs
 - hosted game files
 - hosted game thumbnails from `backend/images/game-img`
-- proxy endpoints
+- proxy endpoints and the Scramjet Wisp websocket transport
 - Monochrome endpoint configuration
 - Discord bot sidecars
 
@@ -44,3 +44,10 @@ Important:
 
 - the backend remains the source of truth for `/api/*`, `/games/*`, `/health`, and `/link-check`
 - the static frontend should not contain secrets, Discord tokens, or service runtime code
+
+Scramjet split:
+
+- keep the frontend static and serve it from a static host
+- keep the live proxy transport on this backend at `/wisp/`
+- let the frontend read `/api/config/public` and `/api/proxy/health`
+- point production traffic at `https://api.sethpang.com`

@@ -8,3 +8,4 @@ backend/config/game-play-stats.json
 scramjet-service/node_modules/
 backend/services/**/node_modules/
 *.log
+node_modules/

@@ -5,6 +5,7 @@ const fsp = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { server: wispServer } = require("@mercuryworkshop/wisp-js/server");
 
 const ROOT_DIR = __dirname;
 const DEFAULT_CONFIG_PATH = path.join(ROOT_DIR, "config", "palladium.env");
@@ -39,6 +40,7 @@ const BROWSER_FETCH_USER_AGENT =
   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const DEFAULT_DISCORD_WIDGET_URL = "https://discord.com/api/guilds/1479914434460913707/widget.json";
 const DEFAULT_DISCORD_INVITE_URL = "https://discord.gg/FNACSCcE26";
+const SCRAMJET_WISP_PATH = "/wisp/";
 
 const STATIC_BLOCKED_ROOTS = new Set([
   ".git",
@@ -341,6 +343,24 @@ function requestOrigin(req) {
     return new URL(`${proto}://${host}`).origin;
   } catch {
     return `http://${host || "localhost"}`;
+  }
+}
+
+function normalizeWebSocketPath(value) {
+  const cleaned = `/${String(value || "").trim().replace(/^\/+/, "").replace(/\/+$/, "")}/`;
+  return cleaned === "//" ? "/" : cleaned;
+}
+
+function toWebSocketUrl(originValue, pathValue) {
+  try {
+    const parsed = new URL(String(originValue || "").trim());
+    parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+    parsed.pathname = normalizeWebSocketPath(pathValue);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
   }
 }
 
@@ -850,12 +870,43 @@ async function startHttpServer(config) {
     }
   });
 
+  server.on("upgrade", (req, socket, head) => {
+    handleUpgradeRequest(req, socket, head);
+  });
+
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(config.port, config.host, resolve);
   });
 
   managed.httpServer = server;
+}
+
+function handleUpgradeRequest(req, socket, head) {
+  let pathname = "";
+
+  try {
+    const parsed = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    pathname = parsed.pathname || "";
+    if (pathname === SCRAMJET_WISP_PATH.slice(0, -1)) {
+      req.url = SCRAMJET_WISP_PATH;
+      pathname = SCRAMJET_WISP_PATH;
+    }
+  } catch {
+    pathname = "";
+  }
+
+  if (pathname === SCRAMJET_WISP_PATH) {
+    wispServer.routeRequest(req, socket, head);
+    return;
+  }
+
+  try {
+    socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+  } catch {
+    // Ignore socket write failures while rejecting unsupported upgrades.
+  }
+  socket.destroy();
 }
 
 async function routeRequest(req, res, config) {
@@ -887,6 +938,7 @@ async function routeRequest(req, res, config) {
           "api/games/trending",
           "api/games/play",
           "api/proxy/fetch",
+          "wisp",
           "api/ai/chat",
           "api/discord/widget",
           "link-check"
@@ -898,7 +950,21 @@ async function routeRequest(req, res, config) {
   }
 
   if (url.pathname === "/api/proxy/health") {
-    sendJson(res, 200, { ok: true, service: "proxy" }, config);
+    const backendOrigin = requestOrigin(req);
+    sendJson(
+      res,
+      200,
+      {
+        ok: true,
+        service: "scramjet",
+        transport: "wisp",
+        message: "Scramjet proxy transport is ready on the backend.",
+        backendBase: backendOrigin,
+        websocketPath: SCRAMJET_WISP_PATH,
+        websocketUrl: toWebSocketUrl(backendOrigin, SCRAMJET_WISP_PATH)
+      },
+      config
+    );
     return;
   }
 
@@ -928,6 +994,10 @@ async function routeRequest(req, res, config) {
           proxy: "/api/proxy/fetch",
           proxyFetch: "/api/proxy/fetch",
           proxyBase,
+          proxyMode: "scramjet",
+          proxyTransport: "wisp",
+          wispPath: SCRAMJET_WISP_PATH,
+          wispUrl: toWebSocketUrl(backendOrigin, SCRAMJET_WISP_PATH),
           aiChat: "/api/ai/chat",
           assetBase: backendOrigin,
           gamesBase: backendOrigin,
