@@ -29,12 +29,6 @@
     "image": "images/game-img/ragdoll-hit.png",
     "category": "ragdoll"
   },
-  "games/stick-ragdoll/stick-war-legacy.html": {
-    "title": "Stick War Legacy",
-    "author": "Max Games Studios",
-    "image": "images/game-img/stick-war-legacy.png",
-    "category": "ragdoll"
-  },
   "games/fnaf/fnaf-1.html": {
     "title": "Five Nights at Freddy's 1",
     "author": "Scott Cawthon",
@@ -183,12 +177,6 @@
     "title": "The Impossible Quiz",
     "author": "Splapp-me-do",
     "image": "images/game-img/the-impossible-quiz.png",
-    "category": "swf"
-  },
-  "games/swf/stick-war-1.html": {
-    "title": "Stick War 1",
-    "author": "Max Games Studios",
-    "image": "images/game-img/stick-war-legacy.png",
     "category": "swf"
   },
   "games/rpg/thats-not-my-neighbor.html": {

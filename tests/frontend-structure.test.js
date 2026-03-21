@@ -115,9 +115,15 @@ test("backend ships a Ruffle launcher for The Impossible Quiz", () => {
   assert.match(source, /\/swf\/impossible-quiz\.swf/);
 });
 
-test("backend ships a Ruffle launcher for Stick War 1", () => {
-  const launcherPath = path.join(BACKEND_DIR, "games", "swf", "stick-war-1.html");
+test("backend Cookie Clicker launcher uses the GitHub-backed mirror", () => {
+  const launcherPath = path.join(BACKEND_DIR, "games", "clickers", "cookie-clicker.html");
   const source = fs.readFileSync(launcherPath, "utf8");
-  assert.match(source, /@ruffle-rs\/ruffle/);
-  assert.match(source, /\/swf\/stick-war-1\.swf/);
+  assert.match(source, /rawcdn\.githack\.com\/bubbls\/UGS-Assets\/main\/cookieclicker\//);
+  assert.doesNotMatch(source, /cdn\.jsdelivr\.net\/gh\/bubbls\/UGS-Assets/);
+});
+
+test("backend no longer ships removed Stick War launchers", () => {
+  assert.ok(!fs.existsSync(path.join(BACKEND_DIR, "games", "swf", "stick-war-1.html")));
+  assert.ok(!fs.existsSync(path.join(BACKEND_DIR, "games", "stick-ragdoll", "stick-war-legacy.html")));
+  assert.ok(!fs.existsSync(path.join(BACKEND_DIR, "swf", "stick-war-1.swf")));
 });

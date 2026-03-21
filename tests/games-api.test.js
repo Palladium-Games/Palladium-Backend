@@ -68,6 +68,7 @@ test("games api serves discovered catalog entries and backend thumbnails", async
   assert.equal(payload.ok, true);
   assert.ok(Array.isArray(payload.games));
   assert.ok(payload.games.length >= 20);
+  assert.ok(!payload.games.some((entry) => /stick-war/i.test(entry.path)), "Stick War games should not remain in the backend catalog.");
 
   const brotato = payload.games.find((entry) => entry.path === "games/bullet-hell/brotato.html");
   assert.ok(brotato, "Expected Brotato in the games catalog");
@@ -98,12 +99,6 @@ test("games api serves discovered catalog entries and backend thumbnails", async
   assert.equal(impossibleQuiz.title, "The Impossible Quiz");
   assert.equal(impossibleQuiz.author, "Splapp-me-do");
   assert.equal(impossibleQuiz.image, "/images/game-img/the-impossible-quiz.png");
-
-  const stickWar1 = payload.games.find((entry) => entry.path === "games/swf/stick-war-1.html");
-  assert.ok(stickWar1, "Expected Stick War 1 in the games catalog");
-  assert.equal(stickWar1.title, "Stick War 1");
-  assert.equal(stickWar1.author, "Max Games Studios");
-  assert.equal(stickWar1.image, "/images/game-img/stick-war-legacy.png");
 
   const thumbResponse = await fetch(`http://127.0.0.1:${port}${brotato.image}`);
   assert.equal(thumbResponse.status, 200);
