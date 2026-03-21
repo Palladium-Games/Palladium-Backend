@@ -185,6 +185,12 @@
     "image": "images/game-img/the-impossible-quiz.png",
     "category": "swf"
   },
+  "games/swf/stick-war-1.html": {
+    "title": "Stick War 1",
+    "author": "Max Games Studios",
+    "image": "images/game-img/stick-war-legacy.png",
+    "category": "swf"
+  },
   "games/rpg/thats-not-my-neighbor.html": {
     "title": "That's Not My Neighbor",
     "author": "Nacho Games",

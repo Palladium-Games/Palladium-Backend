@@ -114,3 +114,10 @@ test("backend ships a Ruffle launcher for The Impossible Quiz", () => {
   assert.match(source, /@ruffle-rs\/ruffle/);
   assert.match(source, /\/swf\/impossible-quiz\.swf/);
 });
+
+test("backend ships a Ruffle launcher for Stick War 1", () => {
+  const launcherPath = path.join(BACKEND_DIR, "games", "swf", "stick-war-1.html");
+  const source = fs.readFileSync(launcherPath, "utf8");
+  assert.match(source, /@ruffle-rs\/ruffle/);
+  assert.match(source, /\/swf\/stick-war-1\.swf/);
+});
