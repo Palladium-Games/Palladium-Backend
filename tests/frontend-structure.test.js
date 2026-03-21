@@ -107,6 +107,12 @@ test("backend ships user and agent guides for the trimmed API surface", () => {
   assert.ok(fs.existsSync(path.join(BACKEND_DIR, "docs", "agent-guide.md")));
 });
 
+test("config template documents optional frontend passthrough without reintroducing hosted games", () => {
+  const template = fs.readFileSync(path.join(BACKEND_DIR, "config", "palladium.env.example"), "utf8");
+  assert.match(template, /^FRONTEND_STATIC_DIR=/m);
+  assert.doesNotMatch(template, /^GAME_CATALOG/m);
+});
+
 test("backend no longer ships legacy hosted frontend, games, thumbnails, or monochrome files", () => {
   assert.ok(!fs.existsSync(path.join(BACKEND_DIR, "games")));
   assert.ok(!fs.existsSync(path.join(BACKEND_DIR, "swf")));

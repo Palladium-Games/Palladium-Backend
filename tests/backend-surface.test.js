@@ -26,26 +26,10 @@ test("backend only exposes the trimmed Discord, AI, proxy, and link-check surfac
     "utf8"
   );
 
-  const child = spawn(process.execPath, ["apps.js"], {
-    cwd: BACKEND_DIR,
-    env: {
-      ...process.env,
-      PALLADIUM_CONFIG: configPath
-    },
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-
-  const output = [];
-  child.stdout.on("data", (chunk) => output.push(String(chunk)));
-  child.stderr.on("data", (chunk) => output.push(String(chunk)));
+  const { child, output } = startBackend(configPath);
 
   t.after(async () => {
-    if (child.exitCode === null && !child.killed) {
-      child.kill("SIGTERM");
-      await waitForExit(child, 2000).catch(() => {
-        child.kill("SIGKILL");
-      });
-    }
+    await stopBackend(child);
     await fsp.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -82,6 +66,89 @@ test("backend only exposes the trimmed Discord, AI, proxy, and link-check surfac
     assert.equal(response.status, 404, `Expected ${route} to stay removed`);
   }
 });
+
+test("backend can optionally serve a separate static frontend checkout", async (t) => {
+  const port = await getOpenPort();
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "antarctic-backend-frontend-"));
+  const frontendDir = path.join(tempDir, "Antarctic-Frontend");
+  const configPath = path.join(tempDir, "palladium.env");
+
+  await fsp.mkdir(path.join(frontendDir, "assets"), { recursive: true });
+  await fsp.writeFile(path.join(frontendDir, "index.html"), "<!doctype html><title>Antarctic</title><div id=\"app\">shell</div>\n", "utf8");
+  await fsp.writeFile(path.join(frontendDir, "styles.css"), "body{background:#001122;}\n", "utf8");
+  await fsp.writeFile(path.join(frontendDir, "assets", "logo.txt"), "antarctic\n", "utf8");
+
+  await fsp.writeFile(
+    configPath,
+    [
+      "SITE_HOST=127.0.0.1",
+      `SITE_PORT=${port}`,
+      "CORS_ORIGIN=*",
+      "OLLAMA_AUTOSTART=false",
+      "DISCORD_BOTS_AUTOSTART=false",
+      "GIT_AUTO_PULL_ENABLED=false",
+      `FRONTEND_STATIC_DIR=${frontendDir}`
+    ].join("\n") + "\n",
+    "utf8"
+  );
+
+  const { child, output } = startBackend(configPath);
+
+  t.after(async () => {
+    await stopBackend(child);
+    await fsp.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const backendBase = `http://127.0.0.1:${port}`;
+  await waitForServer(`${backendBase}/health`, output);
+
+  const shellResponse = await fetch(`${backendBase}/`);
+  assert.equal(shellResponse.status, 200);
+  assert.match(shellResponse.headers.get("content-type") || "", /text\/html/);
+  assert.match(await shellResponse.text(), /<div id="app">shell<\/div>/);
+
+  const cssResponse = await fetch(`${backendBase}/styles.css`);
+  assert.equal(cssResponse.status, 200);
+  assert.match(cssResponse.headers.get("content-type") || "", /text\/css/);
+  assert.match(await cssResponse.text(), /background:#001122/);
+
+  const assetResponse = await fetch(`${backendBase}/assets/logo.txt`);
+  assert.equal(assetResponse.status, 200);
+  assert.equal(await assetResponse.text(), "antarctic\n");
+
+  const shellFallbackResponse = await fetch(`${backendBase}/settings`);
+  assert.equal(shellFallbackResponse.status, 200);
+  assert.match(shellFallbackResponse.headers.get("content-type") || "", /text\/html/);
+
+  const traversalResponse = await fetch(`${backendBase}/%2e%2e/%2e%2e/package.json`);
+  assert.equal(traversalResponse.status, 404);
+});
+
+function startBackend(configPath) {
+  const child = spawn(process.execPath, ["apps.js"], {
+    cwd: BACKEND_DIR,
+    env: {
+      ...process.env,
+      PALLADIUM_CONFIG: configPath
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  const output = [];
+  child.stdout.on("data", (chunk) => output.push(String(chunk)));
+  child.stderr.on("data", (chunk) => output.push(String(chunk)));
+
+  return { child, output };
+}
+
+async function stopBackend(child) {
+  if (child.exitCode === null && !child.killed) {
+    child.kill("SIGTERM");
+    await waitForExit(child, 2000).catch(() => {
+      child.kill("SIGKILL");
+    });
+  }
+}
 
 async function getOpenPort() {
   return new Promise((resolve, reject) => {

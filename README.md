@@ -10,10 +10,11 @@ What it owns:
 - Scramjet proxy APIs plus the Wisp websocket transport
 - link-check analysis used by the Discord tooling
 - proxy-runtime sync tooling for the separate static frontend
+- optional static passthrough for a separate frontend checkout via `FRONTEND_STATIC_DIR`
 
 What it no longer owns:
 
-- frontend HTML/CSS/JS hosting
+- frontend source files inside this backend repo
 - hosted games
 - hosted SWF launchers
 - backend-hosted game thumbnails
@@ -27,6 +28,8 @@ cd palladium-backend
 ```
 
 `./start.sh` will create `config/palladium.env` from the example file on first run and bootstrap runtime dependencies with `npm ci --omit=dev` if `node_modules` is missing or incomplete.
+
+If you want the backend to serve the separately checked-out frontend from the same site, set `FRONTEND_STATIC_DIR` in `config/palladium.env`. Leave it blank to expose only backend routes.
 
 Production target:
 

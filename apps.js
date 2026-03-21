@@ -17,6 +17,26 @@ const BROWSER_FETCH_USER_AGENT =
 const DEFAULT_DISCORD_WIDGET_URL = "https://discord.com/api/guilds/1479914434460913707/widget.json";
 const DEFAULT_DISCORD_INVITE_URL = "https://discord.gg/FNACSCcE26";
 const SCRAMJET_WISP_PATH = "/wisp/";
+const STATIC_CONTENT_TYPES = Object.freeze({
+  ".css": "text/css; charset=utf-8",
+  ".gif": "image/gif",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain; charset=utf-8",
+  ".wasm": "application/wasm",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".xml": "application/xml; charset=utf-8"
+});
 
 const PROVIDER_SIGNATURES = [
   {
@@ -124,7 +144,8 @@ const managed = {
   runtimeStatus: {
     ollama: "disabled",
     discord: "disabled",
-    gitAutoPull: "disabled"
+    gitAutoPull: "disabled",
+    frontend: "disabled"
   }
 };
 
@@ -149,6 +170,7 @@ async function main() {
     maxRequestBodyBytes: readInt(env, "MAX_REQUEST_BODY_BYTES", 131072),
     aiRequestTimeoutMs: readInt(env, "AI_REQUEST_TIMEOUT_MS", 120_000),
     proxyBaseUrl: readString(env, "PROXY_BASE_URL", ""),
+    frontendStaticDir: resolveOptionalPath(readString(env, "FRONTEND_STATIC_DIR", "")),
     discordWidgetUrl: readString(env, "DISCORD_WIDGET_URL", DEFAULT_DISCORD_WIDGET_URL),
     discordInviteUrl: readString(env, "DISCORD_INVITE_URL", DEFAULT_DISCORD_INVITE_URL),
 
@@ -204,6 +226,7 @@ async function main() {
     autoPullCommandTimeoutMs: readInt(env, "GIT_AUTO_PULL_COMMAND_TIMEOUT_MS", 90_000)
   };
 
+  finalizeFrontendStaticConfig(config);
   managed.runtime.config = config;
 
   process.on("SIGINT", () => shutdown(0));
@@ -229,11 +252,36 @@ async function main() {
   console.log(`Ollama:   ${managed.runtimeStatus.ollama}`);
   console.log(`Discord:  ${managed.runtimeStatus.discord}`);
   console.log(`GitAuto:  ${managed.runtimeStatus.gitAutoPull}`);
+  console.log(`Frontend: ${managed.runtimeStatus.frontend}`);
 }
 
 function resolvePath(relativeOrAbsolute) {
   const candidate = path.resolve(ROOT_DIR, relativeOrAbsolute);
   return candidate;
+}
+
+function resolveOptionalPath(relativeOrAbsolute) {
+  const raw = String(relativeOrAbsolute || "").trim();
+  if (!raw) return "";
+  return path.resolve(ROOT_DIR, raw);
+}
+
+function finalizeFrontendStaticConfig(config) {
+  const candidate = String(config.frontendStaticDir || "").trim();
+  if (!candidate) {
+    managed.runtimeStatus.frontend = "disabled";
+    return;
+  }
+
+  const indexPath = path.join(candidate, "index.html");
+  if (!fs.existsSync(indexPath)) {
+    console.warn(`Frontend static dir is missing index.html (${candidate}). Static frontend serving disabled.`);
+    config.frontendStaticDir = "";
+    managed.runtimeStatus.frontend = "disabled (invalid path)";
+    return;
+  }
+
+  managed.runtimeStatus.frontend = `static (${candidate})`;
 }
 
 function displayHost(host) {
@@ -1123,7 +1171,115 @@ async function routeRequest(req, res, config) {
     return;
   }
 
+  if ((method === "GET" || method === "HEAD") && await tryServeFrontendStatic(req, res, config, url.pathname, method === "HEAD")) {
+    return;
+  }
+
   sendText(res, 404, "Not found", config);
+}
+
+async function tryServeFrontendStatic(req, res, config, pathname, headOnly) {
+  const rootDir = String(config.frontendStaticDir || "").trim();
+  if (!rootDir) {
+    return false;
+  }
+
+  const directMatch = await resolveFrontendStaticPath(rootDir, pathname);
+  if (directMatch) {
+    await sendStaticFile(res, directMatch, config, headOnly);
+    return true;
+  }
+
+  if (!shouldServeFrontendShell(pathname)) {
+    return false;
+  }
+
+  const shellPath = path.join(rootDir, "index.html");
+  const shellStats = await safeStat(shellPath);
+  if (!shellStats || !shellStats.isFile()) {
+    return false;
+  }
+
+  await sendStaticFile(res, shellPath, config, headOnly);
+  return true;
+}
+
+async function resolveFrontendStaticPath(rootDir, pathname) {
+  const safePath = safeResolveStaticPath(rootDir, pathname);
+  if (!safePath) {
+    return "";
+  }
+
+  const targetStats = await safeStat(safePath);
+  if (targetStats?.isFile()) {
+    return safePath;
+  }
+
+  if (!targetStats?.isDirectory()) {
+    return "";
+  }
+
+  const indexPath = path.join(safePath, "index.html");
+  const indexStats = await safeStat(indexPath);
+  if (indexStats?.isFile()) {
+    return indexPath;
+  }
+
+  return "";
+}
+
+function safeResolveStaticPath(rootDir, pathname) {
+  const normalizedRoot = path.resolve(rootDir);
+  let decodedPathname = "/";
+
+  try {
+    decodedPathname = decodeURIComponent(String(pathname || "/"));
+  } catch {
+    return "";
+  }
+
+  const relativePath = decodedPathname.replace(/^\/+/, "") || ".";
+  const resolvedPath = path.resolve(normalizedRoot, relativePath);
+  if (resolvedPath !== normalizedRoot && !resolvedPath.startsWith(`${normalizedRoot}${path.sep}`)) {
+    return "";
+  }
+
+  return resolvedPath;
+}
+
+async function safeStat(filePath) {
+  try {
+    return await fsp.stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function shouldServeFrontendShell(pathname) {
+  const normalized = String(pathname || "/").replace(/\/+$/, "");
+  if (!normalized || normalized === "/") {
+    return true;
+  }
+  return path.extname(normalized) === "";
+}
+
+async function sendStaticFile(res, filePath, config, headOnly) {
+  const body = headOnly ? null : await fsp.readFile(filePath);
+  const stats = await fsp.stat(filePath);
+  const contentType = STATIC_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+  const cacheControl = contentType.startsWith("text/html") ? "no-cache" : "public, max-age=300";
+  const headers = {
+    "content-type": contentType,
+    "cache-control": cacheControl,
+    "content-length": String(stats.size)
+  };
+
+  if (headOnly) {
+    sendHead(res, 200, headers, config);
+    return;
+  }
+
+  sendBinary(res, 200, body, headers, config);
 }
 
 function isTextLikeContentType(contentType) {
