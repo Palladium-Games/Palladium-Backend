@@ -156,7 +156,8 @@ test("backend can optionally serve a separate static frontend checkout", async (
     {
       redirect: "manual",
       headers: {
-        accept: "text/html,application/xhtml+xml"
+        accept: "text/html,application/xhtml+xml",
+        "sec-fetch-dest": "document"
       }
     }
   );
@@ -166,6 +167,18 @@ test("backend can optionally serve a separate static frontend checkout", async (
     `/?uri=${encodeURIComponent(proxiedDuckDuckGo)}`
   );
   assert.equal(scramjetServiceResponse.headers.get("cache-control"), "no-cache");
+
+  const scramjetIframeResponse = await fetch(
+    `${backendBase}/service/scramjet/${encodeURIComponent(proxiedDuckDuckGo)}`,
+    {
+      redirect: "manual",
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "sec-fetch-dest": "iframe"
+      }
+    }
+  );
+  assert.equal(scramjetIframeResponse.status, 404);
 
   const traversalResponse = await fetch(`${backendBase}/%2e%2e/%2e%2e/package.json`);
   assert.equal(traversalResponse.status, 404);

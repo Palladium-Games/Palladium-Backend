@@ -1700,11 +1700,20 @@ function decodeScramjetTarget(pathname) {
   }
 }
 
-function isHtmlNavigationRequest(req) {
+function isTopLevelHtmlNavigationRequest(req) {
   const accept = String(req && req.headers ? req.headers.accept || "" : "").toLowerCase();
   const destination = String(req && req.headers ? req.headers["sec-fetch-dest"] || "" : "").toLowerCase();
+  const mode = String(req && req.headers ? req.headers["sec-fetch-mode"] || "" : "").toLowerCase();
 
-  return accept.includes("text/html") || destination === "document" || destination === "iframe";
+  if (destination) {
+    return destination === "document";
+  }
+
+  if (mode) {
+    return mode === "navigate";
+  }
+
+  return accept.includes("text/html");
 }
 
 function buildShellRedirectLocation(uri) {
@@ -1713,7 +1722,7 @@ function buildShellRedirectLocation(uri) {
 
 function tryRedirectScramjetNavigation(req, res, config, pathname, headOnly) {
   const target = decodeScramjetTarget(pathname);
-  if (!target || !isHtmlNavigationRequest(req)) {
+  if (!target || !isTopLevelHtmlNavigationRequest(req)) {
     return false;
   }
 
