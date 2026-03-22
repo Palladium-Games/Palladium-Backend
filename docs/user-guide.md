@@ -5,7 +5,7 @@ This backend is the API side of Antarctic Games. It is meant to run behind `seth
 Daily use:
 
 1. Update `config/palladium.env` with your host, port, Ollama settings, Discord tokens, account provider settings, and any proxy base override.
-   For Supabase, set `ACCOUNT_PROVIDER=supabase` and paste the project's Postgres connection string into `SUPABASE_DB_URL`.
+   For Supabase, set `ACCOUNT_PROVIDER=supabase` and paste the project's Postgres connection string into `SUPABASE_DB_URL`. Keep `?sslmode=require` on the URL unless you have already configured full CA trust and intentionally want `sslmode=verify-full`.
 2. If you want one site to serve both API routes and the static frontend, set `FRONTEND_STATIC_DIR` to the separate frontend checkout, for example `/opt/Antarctic-Frontend` or `../Antarctic-Frontend`.
 3. Start the service with `./start.sh` or `npm start`.
 4. If you prefer doing the install step manually, run `npm ci --omit=dev` before starting.

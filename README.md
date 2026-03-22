@@ -37,6 +37,8 @@ For community accounts/chat/cloud saves, production should use:
 - `ACCOUNT_PROVIDER=supabase`
 - `SUPABASE_DB_URL=postgresql://...`
 
+Supabase connection strings should normally keep `?sslmode=require`. The backend now translates that into the Node `pg` TLS settings Supabase expects. Only use `sslmode=verify-full` when the machine trusts the full CA chain for the database host.
+
 `ACCOUNT_PROVIDER=auto` keeps SQLite as the local fallback when `SUPABASE_DB_URL` is blank, which is useful for tests and temporary local runs.
 
 If you already have live SQLite accounts/chat/save data, migrate it into Supabase with:

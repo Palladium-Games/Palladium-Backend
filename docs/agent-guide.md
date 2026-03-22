@@ -14,6 +14,7 @@ When changing the backend:
 4. Keep auth endpoints and `/api/community/bootstrap` aligned so the frontend can bootstrap logged-in account/chat UI from one payload.
 5. Preserve the Supabase/Postgres community schema contract and tests together whenever auth, public/private room rules, room invites, DM request flow, automod mutes, or save behavior changes.
    If a migration path changes, update `scripts/migrate-community-to-supabase.js`, `services/community-migration.js`, and the migration tests in the same patch.
+   Keep Supabase TLS handling compatible with real production URLs too: `sslmode=require` should stay usable without forcing operators to hand-edit Node TLS flags, while `verify-full` remains the strict option for trusted CA setups.
 6. Keep AI defaults biased toward fast interactive shell replies unless the user explicitly asks for slower/deeper reasoning.
 7. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
 8. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.

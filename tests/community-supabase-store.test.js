@@ -3,13 +3,38 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const { newDb } = require("pg-mem");
 
-const { AntarcticSupabaseCommunityStore, DEFAULT_ROOM_NAME } = require("../services/community-supabase-store.js");
+const {
+  AntarcticSupabaseCommunityStore,
+  createPgPoolConfig,
+  DEFAULT_ROOM_NAME
+} = require("../services/community-supabase-store.js");
 
 function createPool() {
   const db = newDb();
   const adapter = db.adapters.createPg();
   return new adapter.Pool();
 }
+
+test("createPgPoolConfig maps sslmode=require to encrypted non-verified TLS for Supabase", () => {
+  const config = createPgPoolConfig(
+    "postgresql://postgres:secret@db.example.co:5432/postgres?sslmode=require&application_name=antarctic"
+  );
+
+  assert.equal(
+    config.connectionString,
+    "postgresql://postgres:secret@db.example.co:5432/postgres?application_name=antarctic"
+  );
+  assert.deepEqual(config.ssl, { rejectUnauthorized: false });
+});
+
+test("createPgPoolConfig keeps strict certificate verification for sslmode=verify-full", () => {
+  const config = createPgPoolConfig(
+    "postgresql://postgres:secret@db.example.co:5432/postgres?sslmode=verify-full"
+  );
+
+  assert.equal(config.connectionString, "postgresql://postgres:secret@db.example.co:5432/postgres");
+  assert.deepEqual(config.ssl, { rejectUnauthorized: true });
+});
 
 test("supabase store supports auth, rooms, DM requests, direct messages, and cloud saves", async (t) => {
   const pool = createPool();

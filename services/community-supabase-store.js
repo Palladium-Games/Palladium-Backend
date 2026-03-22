@@ -31,6 +31,9 @@ const MAX_SUMMARY_LENGTH = 140;
 const MAX_USERNAME_LENGTH = 24;
 const MIN_PASSWORD_LENGTH = 6;
 const MIN_USERNAME_LENGTH = 3;
+const PG_SSL_QUERY_PARAM_NAMES = Object.freeze([
+  "sslmode"
+]);
 
 /**
  * Normalizes arbitrary text into a trimmed string.
@@ -40,6 +43,74 @@ const MIN_USERNAME_LENGTH = 3;
  */
 function cleanText(value) {
   return String(value == null ? "" : value).trim();
+}
+
+/**
+ * Normalizes a PostgreSQL SSL mode value into a stable lowercase token.
+ *
+ * @param {unknown} value - Candidate SSL mode from a connection string.
+ * @returns {string} Normalized SSL mode token.
+ */
+function normalizePgSslMode(value) {
+  return cleanText(value).toLowerCase();
+}
+
+/**
+ * Builds a node-postgres SSL configuration from a PostgreSQL connection string.
+ *
+ * Supabase connection strings commonly include `sslmode=require`, which libpq
+ * interprets as "encrypt the connection without strict CA verification". The
+ * `pg` driver needs that expressed as an explicit `ssl` object instead, so we
+ * strip the URL query flag and map it to the equivalent Node TLS options.
+ *
+ * @param {string} connectionString - Raw PostgreSQL connection string.
+ * @returns {{ connectionString: string, ssl?: false|{ rejectUnauthorized: boolean } }} Pool configuration.
+ */
+function createPgPoolConfig(connectionString) {
+  const normalizedConnectionString = cleanText(connectionString);
+  if (!normalizedConnectionString) {
+    return {
+      connectionString: ""
+    };
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(normalizedConnectionString);
+  } catch {
+    return {
+      connectionString: normalizedConnectionString
+    };
+  }
+
+  const sslMode = normalizePgSslMode(parsedUrl.searchParams.get("sslmode"));
+  for (const queryParamName of PG_SSL_QUERY_PARAM_NAMES) {
+    parsedUrl.searchParams.delete(queryParamName);
+  }
+
+  const poolConfig = {
+    connectionString: parsedUrl.toString()
+  };
+
+  switch (sslMode) {
+    case "":
+      return poolConfig;
+    case "disable":
+      poolConfig.ssl = false;
+      return poolConfig;
+    case "verify-ca":
+    case "verify-full":
+      poolConfig.ssl = { rejectUnauthorized: true };
+      return poolConfig;
+    case "allow":
+    case "prefer":
+    case "require":
+    case "no-verify":
+      poolConfig.ssl = { rejectUnauthorized: false };
+      return poolConfig;
+    default:
+      return poolConfig;
+  }
 }
 
 /**
@@ -236,9 +307,7 @@ class AntarcticSupabaseCommunityStore {
       if (!this.connectionString) {
         throw new Error("SUPABASE_DB_URL is required when account storage uses Supabase.");
       }
-      this.pool = new Pool({
-        connectionString: this.connectionString
-      });
+      this.pool = new Pool(createPgPoolConfig(this.connectionString));
     }
 
     await this.runSchemaMigrations();
@@ -1632,5 +1701,6 @@ class AntarcticSupabaseCommunityStore {
 
 module.exports = {
   AntarcticSupabaseCommunityStore,
+  createPgPoolConfig,
   DEFAULT_ROOM_NAME
 };
