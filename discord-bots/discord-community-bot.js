@@ -21,8 +21,10 @@ const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434"
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen3.5:0.8b";
 const MODERATION_QWEN_TIMEOUT_MS = Number(process.env.DISCORD_MODERATION_QWEN_TIMEOUT_MS || 8_000);
 const STATE_PATH = process.env.DISCORD_COMMUNITY_STATE_PATH || path.join(__dirname, "..", ".discord-community-bot-state.json");
-const RULES_EMBED_TITLE = "Palladium Rules";
-const RULES_SIGNATURE = "palladium-rules-v1";
+const RULES_EMBED_TITLE = "Antarctic Rules";
+const RULES_SIGNATURE = "antarctic-rules-v1";
+const LEGACY_RULES_EMBED_TITLE = "Palladium Rules";
+const LEGACY_RULES_SIGNATURE = "palladium-rules-v1";
 const RULES_COMMAND_NAME = "rules";
 const INVITES_COMMAND_NAME = "invites";
 
@@ -580,7 +582,7 @@ function buildRuleSections() {
 function buildRulesEmbed() {
   const sections = buildRuleSections();
   const descriptionLines = [
-    "# PALLADIUM RULES",
+    "# ANTARCTIC RULES",
     "Read and follow these rules to keep the server safe, fair, and fun.",
     ""
   ];
@@ -600,7 +602,7 @@ function buildRulesEmbed() {
     description: descriptionLines.join("\n").slice(0, 3900),
     color: 0x60a5fa,
     footer: {
-      text: `Palladium Community • ${RULES_SIGNATURE}`,
+      text: `Antarctic Community • ${RULES_SIGNATURE}`,
     },
     timestamp: new Date().toISOString(),
   };
@@ -610,6 +612,7 @@ function isRulesMessage(message) {
   if (!message || typeof message !== "object") return false;
 
   const content = String(message.content || "");
+  if (content.includes("[ANTARCTIC_RULES_V1]")) return true;
   if (content.includes("[PALLADIUM_RULES_V1]")) return true;
 
   const embeds = Array.isArray(message.embeds) ? message.embeds : [];
@@ -617,7 +620,8 @@ function isRulesMessage(message) {
     const title = String((embed && embed.title) || "");
     const footerText = String((embed && embed.footer && embed.footer.text) || "").toLowerCase();
     if (title === RULES_EMBED_TITLE) return true;
-    if (footerText.includes(RULES_SIGNATURE)) return true;
+    if (title === LEGACY_RULES_EMBED_TITLE) return true;
+    if (footerText.includes(RULES_SIGNATURE) || footerText.includes(LEGACY_RULES_SIGNATURE)) return true;
   }
 
   return false;
@@ -761,7 +765,7 @@ async function postWelcome(member, inviteContext) {
   const inviterDisplay = inviterMention || inviterName;
 
   await discordRequest("POST", `/channels/${WELCOME_CHANNEL_ID}/messages`, {
-    content: `Welcome ${memberMention} (${memberName}) to Palladium Games! You were invited by ${inviterDisplay}, who now has ${inviteCount} invites.`,
+    content: `Welcome ${memberMention} (${memberName}) to Antarctic Games! You were invited by ${inviterDisplay}, who now has ${inviteCount} invites.`,
   });
 
   markMemberWelcomed(memberId);
@@ -1373,9 +1377,9 @@ function createPresence(intents) {
     token: BOT_TOKEN,
     intents,
     status: "online",
-    logPrefix: "Palladium Community",
+    logPrefix: "Antarctic Community",
     activity: {
-      name: "server rules",
+      name: "Antarctic rules",
       type: 3,
     },
     onReady: async () => {
@@ -1409,7 +1413,7 @@ function createPresence(intents) {
         presence = createPresence(1);
       }
     },
-  });
+});
 }
 
 presence = createPresence(activeGatewayIntents);

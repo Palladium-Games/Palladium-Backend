@@ -21,6 +21,10 @@ test("slash command payloads include link checking and saved-link commands", () 
   const addLinkPayload = payloads.find((payload) => payload.name === "addlink");
   assert.equal(addLinkPayload.options.length, 1);
   assert.equal(addLinkPayload.options[0].name, "url");
+  assert.match(addLinkPayload.description, /Antarctic pool/);
+
+  const getLinkPayload = payloads.find((payload) => payload.name === "getlink");
+  assert.match(getLinkPayload.description, /Antarctic pool/);
 });
 
 test("saved link entries normalize urls and timestamps", () => {
@@ -93,10 +97,11 @@ test("saved link payload presents the link and pool metadata", () => {
   );
 
   assert.ok(Array.isArray(payload.embeds));
-  assert.equal(payload.embeds[0].title, "Palladium Link Drop");
+  assert.equal(payload.embeds[0].title, "Antarctic Link Drop");
   assert.match(payload.embeds[0].description, /Open link/);
   assert.equal(payload.embeds[0].fields[0].value, "<@42>");
   assert.equal(payload.embeds[0].fields[1].value, "7");
+  assert.equal(payload.embeds[0].footer.text, "Antarctic Links");
 });
 
 test("apps base resolution accepts Antarctic env aliases", () => {

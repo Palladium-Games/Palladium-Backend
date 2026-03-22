@@ -443,7 +443,7 @@ function buildSavedLinkPayload(entry, totalLinks) {
   return {
     embeds: [
       {
-        title: "Palladium Link Drop",
+        title: "Antarctic Link Drop",
         description: [
           `[Open link](${entry.url})`,
           "",
@@ -454,7 +454,7 @@ function buildSavedLinkPayload(entry, totalLinks) {
           { name: "Added By", value: formatSavedLinkAuthor(entry.addedBy), inline: true },
           { name: "Pool Size", value: String(totalLinks), inline: true },
         ],
-        footer: { text: "Palladium Links" },
+        footer: { text: "Antarctic Links" },
         timestamp: entry.addedAt || new Date().toISOString(),
       },
     ],
@@ -633,7 +633,7 @@ function buildResultPayload(requesterMention, url, result, errorText) {
             { name: "Requested By", value: requesterMention, inline: true },
             { name: "URL", value: clamp(url, 900), inline: false }
           ],
-          footer: { text: "Palladium Link Intelligence" },
+          footer: { text: "Antarctic Link Intelligence" },
           timestamp: new Date().toISOString(),
         },
       ],
@@ -673,7 +673,7 @@ function buildResultPayload(requesterMention, url, result, errorText) {
         ].join("\n"),
         color: verdictColor(result),
         fields,
-        footer: { text: "Palladium Link Intelligence" },
+        footer: { text: "Antarctic Link Intelligence" },
         timestamp: new Date().toISOString(),
       },
     ],
@@ -775,7 +775,7 @@ function buildSlashCommandPayloads() {
     },
     {
       name: ADD_LINK_COMMAND_NAME,
-      description: "Admin only: save a link for the shared Palladium pool.",
+      description: "Admin only: save a link for the shared Antarctic pool.",
       default_member_permissions: MANAGE_GUILD_PERMISSION.toString(),
       options: [
         {
@@ -788,7 +788,7 @@ function buildSlashCommandPayloads() {
     },
     {
       name: GET_LINK_COMMAND_NAME,
-      description: "Get a random saved link from the Palladium pool.",
+      description: "Get a random saved link from the Antarctic pool.",
     },
   ];
 }
@@ -1044,9 +1044,9 @@ async function mainLoop() {
     token: BOT_TOKEN,
     intents: 1,
     status: "online",
-    logPrefix: "Palladium Links",
+    logPrefix: "Antarctic Links",
     activity: {
-      name: "/link /getlink",
+      name: "Antarctic links",
       type: 3,
     },
     onReady: async () => {
@@ -1056,7 +1056,7 @@ async function mainLoop() {
   });
 
   await ensureSlashCommands();
-  console.log(`Palladium link command bot running for channels: ${CHANNEL_IDS.join(", ")}`);
+  console.log(`Antarctic link command bot running for channels: ${CHANNEL_IDS.join(", ")}`);
   console.log(`Antarctic link checker backends: ${APPS_BASES.join(", ")}`);
   console.log(
     LEGACY_POLLING_ENABLED

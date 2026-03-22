@@ -5,7 +5,7 @@ const path = require("node:path");
 const { execSync } = require("node:child_process");
 const { startDiscordPresence } = require("./discord-gateway-presence");
 
-const OFFICIAL_REPO_FALLBACK = "Palladium-Games/Palladium-Games";
+const OFFICIAL_REPO_FALLBACK = "Palladium-Games/Antarctic-Games";
 const OFFICIAL_BRANCH_FALLBACK = "main";
 const DISCORD_API_BASE = process.env.DISCORD_API_BASE || "https://discord.com/api/v10";
 const GITHUB_API_BASE = (process.env.DISCORD_COMMIT_GITHUB_API_BASE || "https://api.github.com").replace(/\/+$/, "");
@@ -212,7 +212,7 @@ function setLastSha(sha) {
 function githubHeaders() {
   const headers = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "Palladium-Commit-Bot/1.0"
+    "User-Agent": "Antarctic-Commit-Bot/1.0"
   };
   if (GITHUB_TOKEN) {
     headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
@@ -612,9 +612,9 @@ const presence = startDiscordPresence({
   token: BOT_TOKEN,
   intents: 0,
   status: "online",
-  logPrefix: "Palladium Commits",
+  logPrefix: "Antarctic Commits",
   activity: {
-    name: "remote commits",
+    name: "Antarctic commits",
     type: 3
   }
 });
@@ -632,7 +632,7 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 console.log(
-  `Palladium commit bot running for ${REPO}@${activeBranch} (poll ${POLL_MS}ms, channel ${CHANNEL_ID}, state ${STATE_PATH}).`
+  `Antarctic commit bot running for ${REPO}@${activeBranch} (poll ${POLL_MS}ms, channel ${CHANNEL_ID}, state ${STATE_PATH}).`
 );
 if (COMMIT_PING_ROLE_ID) {
   console.log(`Commit update mention role ID configured: ${COMMIT_PING_ROLE_ID}.`);

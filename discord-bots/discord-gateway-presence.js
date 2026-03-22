@@ -90,8 +90,8 @@ function startDiscordPresence(options = {}) {
         intents,
         properties: {
           os: process.platform,
-          browser: "palladium-bot",
-          device: "palladium-bot",
+          browser: "antarctic-bot",
+          device: "antarctic-bot",
         },
         presence: {
           status,
@@ -237,7 +237,7 @@ function startDiscordPresence(options = {}) {
       }
       if (ws && ws.readyState === WebSocketImpl.OPEN) {
         try {
-          ws.close(1000, "Palladium shutdown");
+          ws.close(1000, "Antarctic shutdown");
         } catch {
           // Ignore close errors.
         }
