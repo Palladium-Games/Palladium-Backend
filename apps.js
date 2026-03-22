@@ -1676,8 +1676,21 @@ async function safeStat(filePath) {
 
 function shouldServeFrontendShell(pathname) {
   const normalized = String(pathname || "/").replace(/\/+$/, "");
+  const lower = normalized.toLowerCase();
   if (!normalized || normalized === "/") {
     return true;
+  }
+  if (
+    lower === "/health" ||
+    lower === "/link-check" ||
+    lower === SCRAMJET_WISP_PATH.slice(0, -1) ||
+    lower === SCRAMJET_WISP_PATH.replace(/\/+$/, "") ||
+    lower === "/api" ||
+    lower.startsWith("/api/") ||
+    lower === "/service" ||
+    lower.startsWith("/service/")
+  ) {
+    return false;
   }
   return path.extname(normalized) === "";
 }
@@ -1715,6 +1728,10 @@ function isTopLevelHtmlNavigationRequest(req) {
 
   if (mode) {
     return mode === "navigate";
+  }
+
+  if (!accept) {
+    return true;
   }
 
   return accept.includes("text/html");

@@ -150,7 +150,22 @@ test("backend can optionally serve a separate static frontend checkout", async (
   assert.equal(shellFallbackResponse.status, 200);
   assert.match(shellFallbackResponse.headers.get("content-type") || "", /text\/html/);
 
+  const wispHttpResponse = await fetch(`${backendBase}/wisp/`, {
+    redirect: "manual"
+  });
+  assert.equal(wispHttpResponse.status, 404);
+
   const proxiedDuckDuckGo = "https://duckduckgo.com/?q=hi";
+  const scramjetPlainResponse = await requestRaw(
+    `${backendBase}/service/scramjet/${encodeURIComponent(proxiedDuckDuckGo)}`
+  );
+  assert.equal(scramjetPlainResponse.status, 302);
+  assert.equal(
+    scramjetPlainResponse.headers.location,
+    `/?uri=${encodeURIComponent(proxiedDuckDuckGo)}`
+  );
+  assert.equal(scramjetPlainResponse.headers["cache-control"], "no-cache");
+
   const scramjetServiceResponse = await fetch(
     `${backendBase}/service/scramjet/${encodeURIComponent(proxiedDuckDuckGo)}`,
     {
@@ -260,4 +275,24 @@ async function waitForExit(child, timeoutMs) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestRaw(url) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const transport = parsed.protocol === "https:" ? require("node:https") : require("node:http");
+    const request = transport.request(parsed, {
+      method: "GET"
+    }, (response) => {
+      response.resume();
+      response.once("end", () => {
+        resolve({
+          status: Number(response.statusCode || 0),
+          headers: response.headers || {}
+        });
+      });
+    });
+    request.once("error", reject);
+    request.end();
+  });
 }
