@@ -12,9 +12,10 @@ When changing the backend:
 2. Keep `/api/config/public` aligned with what the static frontend actually consumes, including account/chat/save endpoints.
 3. Keep auth endpoints and `/api/community/bootstrap` aligned so the frontend can bootstrap logged-in account/chat UI from one payload.
 4. Preserve the SQLite community schema and tests together whenever auth, thread, DM, or save behavior changes.
-5. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
-6. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.
-7. End every task with `npm run verify`.
+5. Keep AI defaults biased toward fast interactive shell replies unless the user explicitly asks for slower/deeper reasoning.
+6. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
+7. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.
+8. End every task with `npm run verify`.
 
 Regression expectations:
 

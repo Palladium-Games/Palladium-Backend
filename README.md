@@ -61,6 +61,7 @@ Auth bootstrap behavior:
 
 - `GET /api/account/session`, `POST /api/account/signup`, `POST /api/account/login`, and `GET /api/community/bootstrap` all return the authenticated user plus the same `bootstrap` payload.
 - `bootstrap` includes joined threads, room catalog membership state, cloud saves, and aggregate stats so the frontend can paint the logged-in account/chat UI in one round trip.
+- AI chat requests are normalized for low-latency shell responses by default, with shorter context/prediction limits and long-lived Ollama keep-alive reuse.
 
 Docs:
 

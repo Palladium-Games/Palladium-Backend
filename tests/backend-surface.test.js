@@ -80,6 +80,7 @@ test("backend can optionally serve a separate static frontend checkout", async (
   await fsp.mkdir(path.join(frontendDir, "assets"), { recursive: true });
   await fsp.writeFile(path.join(frontendDir, "index.html"), "<!doctype html><title>Antarctic</title><div id=\"app\">shell</div>\n", "utf8");
   await fsp.writeFile(path.join(frontendDir, "styles.css"), "body{background:#001122;}\n", "utf8");
+  await fsp.writeFile(path.join(frontendDir, "sw.js"), "self.addEventListener('fetch',()=>{});\n", "utf8");
   await fsp.writeFile(path.join(frontendDir, "assets", "logo.txt"), "antarctic\n", "utf8");
 
   await fsp.writeFile(
@@ -115,6 +116,12 @@ test("backend can optionally serve a separate static frontend checkout", async (
   assert.equal(cssResponse.status, 200);
   assert.match(cssResponse.headers.get("content-type") || "", /text\/css/);
   assert.match(await cssResponse.text(), /background:#001122/);
+  assert.equal(cssResponse.headers.get("cache-control"), "no-cache");
+
+  const serviceWorkerResponse = await fetch(`${backendBase}/sw.js`);
+  assert.equal(serviceWorkerResponse.status, 200);
+  assert.match(serviceWorkerResponse.headers.get("content-type") || "", /text\/javascript/);
+  assert.equal(serviceWorkerResponse.headers.get("cache-control"), "no-cache");
 
   const assetResponse = await fetch(`${backendBase}/assets/logo.txt`);
   assert.equal(assetResponse.status, 200);

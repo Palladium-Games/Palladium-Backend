@@ -40,6 +40,20 @@ const STATIC_CONTENT_TYPES = Object.freeze({
   ".woff2": "font/woff2",
   ".xml": "application/xml; charset=utf-8"
 });
+const NO_CACHE_STATIC_BASENAMES = new Set([
+  "backend.js",
+  "games-catalog.js",
+  "games-static.js",
+  "index.html",
+  "settings-shell.css",
+  "shell-core.js",
+  "shell.js",
+  "site-settings.js",
+  "site-storage.js",
+  "social-client.js",
+  "styles.css",
+  "sw.js"
+]);
 
 const PROVIDER_SIGNATURES = [
   {
@@ -1540,7 +1554,10 @@ async function sendStaticFile(res, filePath, config, headOnly) {
   const body = headOnly ? null : await fsp.readFile(filePath);
   const stats = await fsp.stat(filePath);
   const contentType = STATIC_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
-  const cacheControl = contentType.startsWith("text/html") ? "no-cache" : "public, max-age=300";
+  const cacheControl =
+    contentType.startsWith("text/html") || NO_CACHE_STATIC_BASENAMES.has(path.basename(filePath))
+      ? "no-cache"
+      : "public, max-age=300";
   const headers = {
     "content-type": contentType,
     "cache-control": cacheControl,
@@ -1977,12 +1994,12 @@ function normalizeAiPayload(payload, fallbackModel) {
 
   const numPredict = Number(options.num_predict);
   if (!Number.isFinite(numPredict) || numPredict <= 0) {
-    options.num_predict = 96;
+    options.num_predict = 64;
   }
 
   const numCtx = Number(options.num_ctx);
   if (!Number.isFinite(numCtx) || numCtx <= 0) {
-    options.num_ctx = 1024;
+    options.num_ctx = 768;
   }
 
   const temperature = Number(options.temperature);
@@ -1994,7 +2011,7 @@ function normalizeAiPayload(payload, fallbackModel) {
 
   const keepAlive = String(normalized.keep_alive || "").trim();
   if (!keepAlive) {
-    normalized.keep_alive = "30m";
+    normalized.keep_alive = "24h";
   }
 
   if (typeof normalized.think !== "boolean") {

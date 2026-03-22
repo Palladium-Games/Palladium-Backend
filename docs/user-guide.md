@@ -14,6 +14,7 @@ Supported backend features:
 
 - Discord widget aggregation and Discord bot sidecars
 - AI chat requests through Ollama at `POST /api/ai/chat`
+- AI chat defaults are tuned for fast shell replies, so the frontend can stream shorter low-latency answers without extra per-request config
 - Scramjet proxy metadata and fetch endpoints
 - Wisp websocket transport at `/wisp/`
 - SQLite-backed account sessions at `GET /api/account/session`, `POST /api/account/signup`, and `POST /api/account/login`
