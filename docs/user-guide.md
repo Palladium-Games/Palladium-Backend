@@ -16,6 +16,7 @@ Supported backend features:
 - AI chat requests through Ollama at `POST /api/ai/chat`
 - AI chat defaults are tuned for fast shell replies, so the frontend can stream shorter low-latency answers without extra per-request config
 - Scramjet proxy metadata and fetch endpoints
+- backend HTTP proxy fallback at `POST /api/proxy/request?url=...` for sites where `/wisp/` websocket upgrades are unavailable
 - Wisp websocket transport at `/wisp/`
 - SQLite-backed account sessions at `GET /api/account/session`, `POST /api/account/signup`, and `POST /api/account/login`
 - one-call community bootstrap at `GET /api/community/bootstrap` plus auth responses that include the same bootstrap payload
@@ -34,7 +35,8 @@ Before deploying:
 
 1. Run `npm run verify`.
 2. Confirm `/api/config/public` returns the expected proxy, AI, Discord, and community endpoints.
-3. Confirm account/session, signup, login, and `/api/community/bootstrap` all return the expected authenticated bootstrap payload for the logged-in UI.
-4. If `FRONTEND_STATIC_DIR` is set, confirm `/` serves the frontend shell and asset paths resolve from that checkout.
-5. Create a throwaway account and confirm login, chat, DMs, and save APIs write into the configured SQLite file.
-6. If `FRONTEND_STATIC_DIR` is blank, confirm the static frontend is pointed at this backend base URL.
+3. If the site is fronted by nginx or another reverse proxy, confirm `/wisp/` really upgrades as a websocket. If it does not, the frontend can still browse over `POST /api/proxy/request`, but websocket-heavy sites will be limited until `/wisp/` is fixed upstream.
+4. Confirm account/session, signup, login, and `/api/community/bootstrap` all return the expected authenticated bootstrap payload for the logged-in UI.
+5. If `FRONTEND_STATIC_DIR` is set, confirm `/` serves the frontend shell and asset paths resolve from that checkout.
+6. Create a throwaway account and confirm login, chat, DMs, and save APIs write into the configured SQLite file.
+7. If `FRONTEND_STATIC_DIR` is blank, confirm the static frontend is pointed at this backend base URL.

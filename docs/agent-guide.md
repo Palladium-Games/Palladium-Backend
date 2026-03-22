@@ -10,17 +10,19 @@ When changing the backend:
 
 1. Update `apps.js`, tests, and docs together so the public contract stays explicit.
 2. Keep `/api/config/public` aligned with what the static frontend actually consumes, including account/chat/save endpoints.
-3. Keep auth endpoints and `/api/community/bootstrap` aligned so the frontend can bootstrap logged-in account/chat UI from one payload.
-4. Preserve the SQLite community schema and tests together whenever auth, thread, DM, or save behavior changes.
-5. Keep AI defaults biased toward fast interactive shell replies unless the user explicitly asks for slower/deeper reasoning.
-6. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
-7. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.
-8. End every task with `npm run verify`.
+3. Keep the proxy contract aligned across `/api/config/public`, `/api/proxy/fetch`, `/api/proxy/request`, and `/wisp/` so the frontend can fall back gracefully when websocket upgrades are unavailable.
+4. Keep auth endpoints and `/api/community/bootstrap` aligned so the frontend can bootstrap logged-in account/chat UI from one payload.
+5. Preserve the SQLite community schema and tests together whenever auth, thread, DM, or save behavior changes.
+6. Keep AI defaults biased toward fast interactive shell replies unless the user explicitly asks for slower/deeper reasoning.
+7. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
+8. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.
+9. End every task with `npm run verify`.
 
 Regression expectations:
 
 - `/health` advertises the live backend features, including account/chat/save routes.
 - `/api/config/public` exposes proxy, AI, Discord, and community metadata without legacy games/assets fields, including `/api/community/bootstrap`.
+- the proxy surface stays usable when `/wisp/` is broken upstream by exposing `/api/proxy/request` as the HTTP fallback transport.
 - backend-only mode leaves `/` unserved when `FRONTEND_STATIC_DIR` is blank.
 - configured frontend passthrough can serve the separate static frontend shell and assets.
 - legacy backend-hosted game and image routes remain absent.

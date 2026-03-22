@@ -19,6 +19,9 @@ const DEFAULT_DISCORD_WIDGET_URL = "https://discord.com/api/guilds/1479914434460
 const DEFAULT_DISCORD_INVITE_URL = "https://discord.gg/FNACSCcE26";
 const DEFAULT_ACCOUNT_SQLITE_PATH = path.join(ROOT_DIR, "target", "antarctic-community.sqlite");
 const DEFAULT_SESSION_COOKIE_NAME = "antarctic_session";
+const MAX_PROXY_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
+const PROXY_REQUEST_HEADER_METHOD = "x-antarctic-proxy-method";
+const PROXY_REQUEST_HEADER_HEADERS = "x-antarctic-proxy-headers";
 const SCRAMJET_WISP_PATH = "/wisp/";
 const STATIC_CONTENT_TYPES = Object.freeze({
   ".css": "text/css; charset=utf-8",
@@ -54,6 +57,7 @@ const NO_CACHE_STATIC_BASENAMES = new Set([
   "styles.css",
   "sw.js"
 ]);
+const PROXY_ALLOWED_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 
 const PROVIDER_SIGNATURES = [
   {
@@ -962,6 +966,7 @@ async function routeRequest(req, res, config) {
         services: {
           proxy: "/api/proxy/fetch",
           proxyFetch: "/api/proxy/fetch",
+          proxyRequest: "/api/proxy/request",
           proxyBase,
           proxyMode: "scramjet",
           proxyTransport: "wisp",
@@ -1314,6 +1319,64 @@ async function routeRequest(req, res, config) {
         },
         config,
         method === "HEAD"
+      );
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/proxy/request" && method === "POST") {
+    const target = normalizeUserUrl(url.searchParams.get("url") || "");
+    if (!target) {
+      sendJson(res, 400, { ok: false, error: "Missing or invalid url parameter" }, config);
+      return;
+    }
+
+    const upstreamMethod = normalizeProxyMethod(req.headers[PROXY_REQUEST_HEADER_METHOD]);
+    if (!upstreamMethod) {
+      sendJson(res, 400, { ok: false, error: "Missing or invalid upstream method." }, config);
+      return;
+    }
+
+    const upstreamHeaders = parseProxyRequestHeaders(req.headers[PROXY_REQUEST_HEADER_HEADERS]);
+    let upstreamBody = null;
+    if (!["GET", "HEAD"].includes(upstreamMethod)) {
+      try {
+        upstreamBody = await readRequestBody(req, Math.max(config.maxRequestBodyBytes, MAX_PROXY_REQUEST_BODY_BYTES));
+      } catch (error) {
+        sendJson(res, 413, { ok: false, error: String(error?.message || "Proxy request body too large.") }, config);
+        return;
+      }
+    }
+
+    try {
+      const response = await fetch(target, {
+        method: upstreamMethod,
+        headers: upstreamHeaders,
+        body: upstreamBody && upstreamBody.length ? upstreamBody : undefined,
+        redirect: "manual",
+        signal: AbortSignal.timeout(Math.max(5_000, config.requestTimeoutMs))
+      });
+
+      const responseHeaders = collectUpstreamHeaders(response.headers);
+      const finalUrl = response.url || target;
+      responseHeaders["x-antarctic-final-url"] = finalUrl;
+      responseHeaders["x-palladium-final-url"] = finalUrl;
+      responseHeaders["x-antarctic-proxy-status-text"] = response.statusText || "";
+      responseHeaders["x-palladium-proxy-status-text"] = response.statusText || "";
+
+      if (upstreamMethod === "HEAD" || [101, 204, 205, 304].includes(response.status)) {
+        sendHead(res, response.status, responseHeaders, config);
+        return;
+      }
+
+      const body = Buffer.from(await response.arrayBuffer());
+      sendBinary(res, response.status, body, responseHeaders, config);
+    } catch (error) {
+      sendJson(
+        res,
+        502,
+        { ok: false, error: String(error?.message || "Proxy request failed.") },
+        config
       );
     }
     return;
@@ -2447,6 +2510,99 @@ function readSessionToken(req) {
   return String(cookies[DEFAULT_SESSION_COOKIE_NAME] || "").trim();
 }
 
+function normalizeProxyMethod(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return PROXY_ALLOWED_METHODS.has(normalized) ? normalized : "";
+}
+
+function parseProxyRequestHeaders(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return {};
+  }
+
+  let parsed = {};
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+
+  const headers = {};
+  for (const [key, entryValue] of Object.entries(parsed || {})) {
+    const headerName = String(key || "").trim().toLowerCase();
+    if (!headerName || shouldBlockProxyHeader(headerName)) {
+      continue;
+    }
+
+    const normalizedValue = Array.isArray(entryValue)
+      ? entryValue.map((item) => String(item == null ? "" : item)).join(", ")
+      : String(entryValue == null ? "" : entryValue);
+    if (!normalizedValue) {
+      continue;
+    }
+
+    headers[headerName] = normalizedValue;
+  }
+
+  return headers;
+}
+
+function shouldBlockProxyHeader(headerName) {
+  return (
+    !headerName ||
+    headerName === "connection" ||
+    headerName === "content-length" ||
+    headerName === "cookie" ||
+    headerName === "host" ||
+    headerName === "origin" ||
+    headerName === "referer" ||
+    headerName === "transfer-encoding" ||
+    headerName === "upgrade" ||
+    headerName.startsWith("proxy-") ||
+    headerName.startsWith("sec-") ||
+    headerName.startsWith("x-antarctic-") ||
+    headerName.startsWith("x-palladium-")
+  );
+}
+
+function shouldBlockUpstreamResponseHeader(headerName) {
+  return (
+    !headerName ||
+    headerName === "connection" ||
+    headerName === "content-length" ||
+    headerName === "keep-alive" ||
+    headerName === "proxy-authenticate" ||
+    headerName === "proxy-authorization" ||
+    headerName === "te" ||
+    headerName === "trailer" ||
+    headerName === "transfer-encoding" ||
+    headerName === "upgrade"
+  );
+}
+
+function collectUpstreamHeaders(headers) {
+  const collected = {};
+  if (!headers || typeof headers.entries !== "function") {
+    return collected;
+  }
+
+  for (const [name, value] of headers.entries()) {
+    const headerName = String(name || "").trim().toLowerCase();
+    if (!headerName || shouldBlockUpstreamResponseHeader(headerName)) {
+      continue;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(collected, headerName)) {
+      collected[headerName] = `${collected[headerName]}, ${value}`;
+    } else {
+      collected[headerName] = value;
+    }
+  }
+
+  return collected;
+}
+
 async function resolveAuthenticatedSession(req, config, required) {
   const token = readSessionToken(req);
   const store = managed.runtime.communityStore;
@@ -2522,7 +2678,17 @@ function clearSessionCookie(res) {
 function addCors(res, config) {
   res.setHeader("access-control-allow-origin", config.corsOrigin);
   res.setHeader("access-control-allow-methods", "GET,HEAD,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("access-control-allow-headers", "content-type,authorization,x-antarctic-session,x-palladium-session");
+  res.setHeader(
+    "access-control-allow-headers",
+    [
+      "content-type",
+      "authorization",
+      "x-antarctic-session",
+      "x-palladium-session",
+      PROXY_REQUEST_HEADER_METHOD,
+      PROXY_REQUEST_HEADER_HEADERS
+    ].join(",")
+  );
 }
 
 function addSecurityHeaders(res, options = {}) {

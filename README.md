@@ -44,6 +44,7 @@ Important routes:
 - `GET /api/config/public`
 - `GET /api/proxy/health`
 - `GET /api/proxy/fetch?url=...`
+- `POST /api/proxy/request?url=...`
 - `POST /api/ai/chat`
 - `GET /api/account/session`
 - `GET /api/community/bootstrap`
@@ -62,6 +63,7 @@ Auth bootstrap behavior:
 - `GET /api/account/session`, `POST /api/account/signup`, `POST /api/account/login`, and `GET /api/community/bootstrap` all return the authenticated user plus the same `bootstrap` payload.
 - `bootstrap` includes joined threads, room catalog membership state, cloud saves, and aggregate stats so the frontend can paint the logged-in account/chat UI in one round trip.
 - AI chat requests are normalized for low-latency shell responses by default, with shorter context/prediction limits and long-lived Ollama keep-alive reuse.
+- The static frontend prefers Wisp for Scramjet, but can fall back to `POST /api/proxy/request` when a reverse proxy is not forwarding `/wisp/` websocket upgrades correctly.
 
 Docs:
 
