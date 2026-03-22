@@ -6,6 +6,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { server: wispServer } = require("@mercuryworkshop/wisp-js/server");
+const { AntarcticCommunityStore } = require("./services/community-sqlite-store");
 
 const ROOT_DIR = __dirname;
 const DEFAULT_CONFIG_PATH = path.join(ROOT_DIR, "config", "palladium.env");
@@ -16,6 +17,8 @@ const BROWSER_FETCH_USER_AGENT =
   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 const DEFAULT_DISCORD_WIDGET_URL = "https://discord.com/api/guilds/1479914434460913707/widget.json";
 const DEFAULT_DISCORD_INVITE_URL = "https://discord.gg/FNACSCcE26";
+const DEFAULT_ACCOUNT_SQLITE_PATH = path.join(ROOT_DIR, "target", "antarctic-community.sqlite");
+const DEFAULT_SESSION_COOKIE_NAME = "antarctic_session";
 const SCRAMJET_WISP_PATH = "/wisp/";
 const STATIC_CONTENT_TYPES = Object.freeze({
   ".css": "text/css; charset=utf-8",
@@ -145,7 +148,8 @@ const managed = {
     ollama: "disabled",
     discord: "disabled",
     gitAutoPull: "disabled",
-    frontend: "disabled"
+    frontend: "disabled",
+    accounts: "disabled"
   }
 };
 
@@ -171,6 +175,8 @@ async function main() {
     aiRequestTimeoutMs: readInt(env, "AI_REQUEST_TIMEOUT_MS", 120_000),
     proxyBaseUrl: readString(env, "PROXY_BASE_URL", ""),
     frontendStaticDir: resolveOptionalPath(readString(env, "FRONTEND_STATIC_DIR", "")),
+    accountSqlitePath: resolvePath(readString(env, "ACCOUNT_SQLITE_PATH", DEFAULT_ACCOUNT_SQLITE_PATH)),
+    accountSessionTtlDays: readInt(env, "ACCOUNT_SESSION_TTL_DAYS", 30),
     discordWidgetUrl: readString(env, "DISCORD_WIDGET_URL", DEFAULT_DISCORD_WIDGET_URL),
     discordInviteUrl: readString(env, "DISCORD_INVITE_URL", DEFAULT_DISCORD_INVITE_URL),
 
@@ -243,6 +249,7 @@ async function main() {
   await startOllamaIfNeeded(config);
   await startDiscordBotsIfNeeded(config);
   await startAutoPullLoop(config);
+  await startCommunityStore(config);
 
   await startHttpServer(config);
 
@@ -253,6 +260,7 @@ async function main() {
   console.log(`Discord:  ${managed.runtimeStatus.discord}`);
   console.log(`GitAuto:  ${managed.runtimeStatus.gitAutoPull}`);
   console.log(`Frontend: ${managed.runtimeStatus.frontend}`);
+  console.log(`Accounts: ${managed.runtimeStatus.accounts}`);
 }
 
 function resolvePath(relativeOrAbsolute) {
@@ -588,6 +596,17 @@ async function startDiscordBotsIfNeeded(config) {
   }
 }
 
+async function startCommunityStore(config) {
+  const store = new AntarcticCommunityStore({
+    dbPath: config.accountSqlitePath,
+    sessionTtlDays: config.accountSessionTtlDays
+  });
+
+  await store.initialize();
+  managed.runtime.communityStore = store;
+  managed.runtimeStatus.accounts = `sqlite (${config.accountSqlitePath})`;
+}
+
 async function startAutoPullLoop(config) {
   if (!config.autoPullEnabled) {
     managed.runtimeStatus.gitAutoPull = "disabled";
@@ -873,7 +892,10 @@ async function routeRequest(req, res, config) {
           "wisp",
           "api/ai/chat",
           "api/discord/widget",
-          "link-check"
+          "link-check",
+          "api/account/session",
+          "api/chat/threads",
+          "api/saves"
         ]
       },
       config
@@ -931,7 +953,12 @@ async function routeRequest(req, res, config) {
           wispPath: SCRAMJET_WISP_PATH,
           wispUrl: toWebSocketUrl(backendOrigin, SCRAMJET_WISP_PATH),
           aiChat: "/api/ai/chat",
-          defaultAiModel: config.ollamaModel
+          defaultAiModel: config.ollamaModel,
+          accountSession: "/api/account/session",
+          accountLogin: "/api/account/login",
+          accountSignup: "/api/account/signup",
+          chatThreads: "/api/chat/threads",
+          saves: "/api/saves"
         },
         discord: {
           commitBotConfigured: Boolean(config.discordCommitBotToken),
@@ -947,6 +974,258 @@ async function routeRequest(req, res, config) {
       },
       config
     );
+    return;
+  }
+
+  if (url.pathname === "/api/account/session" && (method === "GET" || method === "HEAD")) {
+    const session = await resolveAuthenticatedSession(req, config, false);
+    if (!session) {
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          authenticated: false,
+          user: null
+        },
+        config,
+        method === "HEAD"
+      );
+      return;
+    }
+
+    sendJson(
+      res,
+      200,
+      {
+        ok: true,
+        authenticated: true,
+        token: session.token,
+        user: session.user
+      },
+      config,
+      method === "HEAD"
+    );
+    return;
+  }
+
+  if (url.pathname === "/api/account/signup" && method === "POST") {
+    const payload = await readJsonRequest(req, res, config);
+    if (!payload) return;
+
+    try {
+      const session = await managed.runtime.communityStore.signUp({
+        username: payload.username,
+        password: payload.password
+      });
+      setSessionCookie(res, session.token, config);
+      sendJson(res, 201, {
+        ok: true,
+        authenticated: true,
+        token: session.token,
+        user: session.user
+      }, config);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Could not create account.") }, config);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/account/login" && method === "POST") {
+    const payload = await readJsonRequest(req, res, config);
+    if (!payload) return;
+
+    try {
+      const session = await managed.runtime.communityStore.login({
+        username: payload.username,
+        password: payload.password
+      });
+      setSessionCookie(res, session.token, config);
+      sendJson(res, 200, {
+        ok: true,
+        authenticated: true,
+        token: session.token,
+        user: session.user
+      }, config);
+    } catch (error) {
+      sendJson(res, 401, { ok: false, error: String(error?.message || "Invalid username or password.") }, config);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/account/logout" && method === "POST") {
+    const sessionToken = readSessionToken(req);
+    if (sessionToken) {
+      await managed.runtime.communityStore.logout(sessionToken);
+    }
+    clearSessionCookie(res);
+    sendJson(res, 200, { ok: true }, config);
+    return;
+  }
+
+  if (url.pathname === "/api/account/search-users" && (method === "GET" || method === "HEAD")) {
+    const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
+    if (!session) return;
+
+    const users = managed.runtime.communityStore.searchUsers(session.user.id, url.searchParams.get("q") || "");
+    sendJson(res, 200, { ok: true, users }, config, method === "HEAD");
+    return;
+  }
+
+  if (url.pathname === "/api/chat/threads" && (method === "GET" || method === "HEAD")) {
+    const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
+    if (!session) return;
+
+    const catalog = managed.runtime.communityStore.listThreadsForUser(session.user.id);
+    sendJson(res, 200, { ok: true, user: session.user, ...catalog }, config, method === "HEAD");
+    return;
+  }
+
+  if (url.pathname === "/api/chat/rooms" && method === "POST") {
+    const session = await requireAuthenticatedSession(req, res, config);
+    if (!session) return;
+    const payload = await readJsonRequest(req, res, config);
+    if (!payload) return;
+
+    try {
+      const thread = await managed.runtime.communityStore.createRoom(session.user.id, payload.name);
+      const catalog = managed.runtime.communityStore.listThreadsForUser(session.user.id);
+      sendJson(res, 201, { ok: true, thread, ...catalog }, config);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Could not create room.") }, config);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/chat/dms" && method === "POST") {
+    const session = await requireAuthenticatedSession(req, res, config);
+    if (!session) return;
+    const payload = await readJsonRequest(req, res, config);
+    if (!payload) return;
+
+    try {
+      const thread = await managed.runtime.communityStore.createDirectThread(session.user.id, payload.username);
+      const catalog = managed.runtime.communityStore.listThreadsForUser(session.user.id);
+      sendJson(res, 201, { ok: true, thread, ...catalog }, config);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Could not open direct message.") }, config);
+    }
+    return;
+  }
+
+  const roomJoinMatch = url.pathname.match(/^\/api\/chat\/threads\/(\d+)\/join$/);
+  if (roomJoinMatch && method === "POST") {
+    const session = await requireAuthenticatedSession(req, res, config);
+    if (!session) return;
+
+    try {
+      const thread = await managed.runtime.communityStore.joinRoom(session.user.id, Number(roomJoinMatch[1]));
+      const catalog = managed.runtime.communityStore.listThreadsForUser(session.user.id);
+      sendJson(res, 200, { ok: true, thread, ...catalog }, config);
+    } catch (error) {
+      sendJson(res, 404, { ok: false, error: String(error?.message || "Could not join room.") }, config);
+    }
+    return;
+  }
+
+  const threadMessagesMatch = url.pathname.match(/^\/api\/chat\/threads\/(\d+)\/messages$/);
+  if (threadMessagesMatch && (method === "GET" || method === "HEAD")) {
+    const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
+    if (!session) return;
+
+    try {
+      const threadId = Number(threadMessagesMatch[1]);
+      const thread = managed.runtime.communityStore.getThreadForUser(session.user.id, threadId);
+      if (!thread) {
+        sendJson(res, 404, { ok: false, error: "Conversation not found." }, config, method === "HEAD");
+        return;
+      }
+      const messages = managed.runtime.communityStore.listMessages(session.user.id, threadId);
+      sendJson(res, 200, { ok: true, thread, messages }, config, method === "HEAD");
+    } catch (error) {
+      sendJson(res, 404, { ok: false, error: String(error?.message || "Conversation not found.") }, config, method === "HEAD");
+    }
+    return;
+  }
+
+  if (threadMessagesMatch && method === "POST") {
+    const session = await requireAuthenticatedSession(req, res, config);
+    if (!session) return;
+    const payload = await readJsonRequest(req, res, config);
+    if (!payload) return;
+
+    try {
+      const threadId = Number(threadMessagesMatch[1]);
+      const message = await managed.runtime.communityStore.addMessage(session.user.id, threadId, payload.content);
+      const messages = managed.runtime.communityStore.listMessages(session.user.id, threadId);
+      const thread = managed.runtime.communityStore.getThreadForUser(session.user.id, threadId);
+      sendJson(res, 201, { ok: true, thread, message, messages }, config);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Could not send message.") }, config);
+    }
+    return;
+  }
+
+  if (url.pathname === "/api/saves" && (method === "GET" || method === "HEAD")) {
+    const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
+    if (!session) return;
+
+    const saves = managed.runtime.communityStore.listGameSaves(session.user.id);
+    sendJson(res, 200, { ok: true, saves }, config, method === "HEAD");
+    return;
+  }
+
+  const saveMatch = url.pathname.match(/^\/api\/saves\/(.+)$/);
+  if (saveMatch && (method === "GET" || method === "HEAD")) {
+    const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
+    if (!session) return;
+
+    try {
+      const gameKey = decodeURIComponent(saveMatch[1]);
+      const save = managed.runtime.communityStore.getGameSave(session.user.id, gameKey);
+      if (!save) {
+        sendJson(res, 404, { ok: false, error: "Save not found." }, config, method === "HEAD");
+        return;
+      }
+      sendJson(res, 200, { ok: true, save }, config, method === "HEAD");
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: "Invalid save key." }, config, method === "HEAD");
+    }
+    return;
+  }
+
+  if (saveMatch && method === "PUT") {
+    const session = await requireAuthenticatedSession(req, res, config);
+    if (!session) return;
+    const payload = await readJsonRequest(req, res, config);
+    if (!payload) return;
+
+    try {
+      const gameKey = decodeURIComponent(saveMatch[1]);
+      const save = await managed.runtime.communityStore.putGameSave(
+        session.user.id,
+        gameKey,
+        payload.data,
+        payload.summary
+      );
+      sendJson(res, 200, { ok: true, save }, config);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Could not save progress.") }, config);
+    }
+    return;
+  }
+
+  if (saveMatch && method === "DELETE") {
+    const session = await requireAuthenticatedSession(req, res, config);
+    if (!session) return;
+
+    try {
+      const gameKey = decodeURIComponent(saveMatch[1]);
+      await managed.runtime.communityStore.deleteGameSave(session.user.id, gameKey);
+      sendJson(res, 200, { ok: true }, config);
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: String(error?.message || "Could not delete save.") }, config);
+    }
     return;
   }
 
@@ -2084,10 +2363,102 @@ function readRequestBody(req, maxBytes) {
   });
 }
 
+async function readJsonRequest(req, res, config) {
+  let body;
+  try {
+    body = await readRequestBody(req, config.maxRequestBodyBytes);
+  } catch (error) {
+    sendJson(res, 413, { ok: false, error: String(error?.message || "Request body too large.") }, config);
+    return null;
+  }
+
+  const parsed = parseJsonObject(body.toString("utf8").trim());
+  if (!parsed) {
+    sendJson(res, 400, { ok: false, error: "Request body must be valid JSON." }, config);
+    return null;
+  }
+
+  return parsed;
+}
+
+function parseRequestCookies(req) {
+  const raw = String(req?.headers?.cookie || "");
+  const cookies = {};
+  if (!raw) return cookies;
+
+  for (const pair of raw.split(/;\s*/)) {
+    if (!pair) continue;
+    const separatorIndex = pair.indexOf("=");
+    const key = separatorIndex === -1 ? pair : pair.slice(0, separatorIndex);
+    const value = separatorIndex === -1 ? "" : pair.slice(separatorIndex + 1);
+    try {
+      cookies[decodeURIComponent(key)] = decodeURIComponent(value);
+    } catch {
+      cookies[key] = value;
+    }
+  }
+
+  return cookies;
+}
+
+function readSessionToken(req) {
+  const explicitHeader = String(req.headers["x-antarctic-session"] || req.headers["x-palladium-session"] || "").trim();
+  if (explicitHeader) {
+    return explicitHeader;
+  }
+
+  const authHeader = String(req.headers.authorization || "").trim();
+  if (/^Bearer\s+/i.test(authHeader)) {
+    return authHeader.replace(/^Bearer\s+/i, "").trim();
+  }
+
+  const cookies = parseRequestCookies(req);
+  return String(cookies[DEFAULT_SESSION_COOKIE_NAME] || "").trim();
+}
+
+async function resolveAuthenticatedSession(req, config, required) {
+  const token = readSessionToken(req);
+  const store = managed.runtime.communityStore;
+  const session = token ? await store.getSession(token) : null;
+
+  if (!required || session) {
+    return session;
+  }
+
+  return null;
+}
+
+async function requireAuthenticatedSession(req, res, config, headOnly = false) {
+  const session = await resolveAuthenticatedSession(req, config, true);
+  if (session) {
+    return session;
+  }
+
+  clearSessionCookie(res);
+  sendJson(res, 401, { ok: false, error: "Login required." }, config, headOnly);
+  return null;
+}
+
+function setSessionCookie(res, token, config) {
+  if (!token) return;
+  const secureFlag = String(config.corsOrigin || "").startsWith("https://") ? "; Secure" : "";
+  res.setHeader(
+    "set-cookie",
+    `${DEFAULT_SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Max-Age=${Math.max(1, config.accountSessionTtlDays) * 24 * 60 * 60}; Path=/; HttpOnly; SameSite=Lax${secureFlag}`
+  );
+}
+
+function clearSessionCookie(res) {
+  res.setHeader(
+    "set-cookie",
+    `${DEFAULT_SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`
+  );
+}
+
 function addCors(res, config) {
   res.setHeader("access-control-allow-origin", config.corsOrigin);
-  res.setHeader("access-control-allow-methods", "GET,HEAD,POST,OPTIONS");
-  res.setHeader("access-control-allow-headers", "content-type,authorization");
+  res.setHeader("access-control-allow-methods", "GET,HEAD,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("access-control-allow-headers", "content-type,authorization,x-antarctic-session,x-palladium-session");
 }
 
 function addSecurityHeaders(res, options = {}) {

@@ -20,6 +20,7 @@ const REQUIRED_FRONTEND_FILES = [
   "styles.css",
   "settings-shell.css",
   "backend.js",
+  "social-client.js",
   "games-static.js",
   "shell-core.js",
   "shell.js",
@@ -50,6 +51,8 @@ test("frontend shell ships the built-in antarctic routes and proxy runtime asset
   const shellPage = fs.readFileSync(path.join(FRONTEND_DIR, "index.html"), "utf8");
   assert.match(shellPage, /games-search-input/);
   assert.match(shellPage, /antarctic:\/\/games/);
+  assert.match(shellPage, /antarctic:\/\/account/);
+  assert.match(shellPage, /antarctic:\/\/chat/);
   assert.match(shellPage, /antarctic:\/\/settings/);
   assert.match(shellPage, /scram\/scramjet\.all\.js/);
   assert.match(shellPage, /baremux\/index\.js/);

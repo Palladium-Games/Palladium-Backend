@@ -8,6 +8,7 @@ What it owns:
 - Discord bot sidecars and Discord-facing APIs
 - AI chat APIs backed by Ollama
 - Scramjet proxy APIs plus the Wisp websocket transport
+- SQLite-backed account auth, chat rooms, DMs, and cloud-save APIs
 - link-check analysis used by the Discord tooling
 - proxy-runtime sync tooling for the separate static frontend
 - optional static passthrough for a separate frontend checkout via `FRONTEND_STATIC_DIR`
@@ -44,6 +45,13 @@ Important routes:
 - `GET /api/proxy/health`
 - `GET /api/proxy/fetch?url=...`
 - `POST /api/ai/chat`
+- `GET /api/account/session`
+- `POST /api/account/signup`
+- `POST /api/account/login`
+- `GET /api/chat/threads`
+- `POST /api/chat/rooms`
+- `POST /api/chat/dms`
+- `GET /api/saves`
 - `GET /api/discord/widget`
 - `GET /link-check?url=...`
 - websocket upgrades on `/wisp/`

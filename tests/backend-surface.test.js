@@ -8,7 +8,7 @@ const { spawn } = require("node:child_process");
 
 const BACKEND_DIR = path.resolve(__dirname, "..");
 
-test("backend only exposes the trimmed Discord, AI, proxy, and link-check surface", async (t) => {
+test("backend exposes Discord, AI, proxy, account, chat, and save surfaces", async (t) => {
   const port = await getOpenPort();
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "antarctic-backend-surface-"));
   const configPath = path.join(tempDir, "palladium.env");
@@ -47,7 +47,10 @@ test("backend only exposes the trimmed Discord, AI, proxy, and link-check surfac
     "wisp",
     "api/ai/chat",
     "api/discord/widget",
-    "link-check"
+    "link-check",
+    "api/account/session",
+    "api/chat/threads",
+    "api/saves"
   ]);
 
   const legacyRoutes = [

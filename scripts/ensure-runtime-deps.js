@@ -13,6 +13,7 @@ const REQUIRED_RUNTIME_MODULES = Object.freeze([
   "@mercuryworkshop/bare-mux",
   "@mercuryworkshop/libcurl-transport",
   "@mercuryworkshop/scramjet",
+  "sql.js",
   "ws"
 ]);
 
