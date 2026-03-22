@@ -113,6 +113,8 @@ test("backend ships user and agent guides for the trimmed API surface", () => {
 test("config template documents optional frontend passthrough without reintroducing hosted games", () => {
   const template = fs.readFileSync(path.join(BACKEND_DIR, "config", "palladium.env.example"), "utf8");
   assert.match(template, /^FRONTEND_STATIC_DIR=/m);
+  assert.match(template, /^ACCOUNT_PROVIDER=auto$/m);
+  assert.match(template, /^SUPABASE_DB_URL=$/m);
   assert.doesNotMatch(template, /^GAME_CATALOG/m);
 });
 

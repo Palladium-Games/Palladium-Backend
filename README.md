@@ -8,7 +8,7 @@ What it owns:
 - Discord bot sidecars and Discord-facing APIs
 - AI chat APIs backed by Ollama
 - Scramjet proxy APIs plus the Wisp websocket transport
-- SQLite-backed account auth, public/private chat rooms, room invite notifications, DM requests/acceptance, live DMs, automod mutes, and cloud-save APIs
+- Supabase-backed account auth, public/private chat rooms, room invite notifications, DM requests/acceptance, live DMs, automod mutes, and cloud-save APIs
 - link-check analysis used by the Discord tooling
 - proxy-runtime sync tooling for the separate static frontend
 - optional static passthrough for a separate frontend checkout via `FRONTEND_STATIC_DIR`
@@ -31,6 +31,13 @@ cd palladium-backend
 `./start.sh` will create `config/palladium.env` from the example file on first run and bootstrap runtime dependencies with `npm ci --omit=dev` if `node_modules` is missing or incomplete.
 
 If you want the backend to serve the separately checked-out frontend from the same site, set `FRONTEND_STATIC_DIR` in `config/palladium.env`. Leave it blank to expose only backend routes.
+
+For community accounts/chat/cloud saves, production should use:
+
+- `ACCOUNT_PROVIDER=supabase`
+- `SUPABASE_DB_URL=postgresql://...`
+
+`ACCOUNT_PROVIDER=auto` keeps SQLite as the local fallback when `SUPABASE_DB_URL` is blank, which is useful for tests and temporary local runs.
 
 Production target:
 

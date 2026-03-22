@@ -6,7 +6,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { server: wispServer } = require("@mercuryworkshop/wisp-js/server");
-const { AntarcticCommunityStore } = require("./services/community-sqlite-store");
+const { createCommunityStore } = require("./services/community-store-factory");
 
 const ROOT_DIR = __dirname;
 const DEFAULT_CONFIG_PATH = path.join(ROOT_DIR, "config", "palladium.env");
@@ -193,7 +193,9 @@ async function main() {
     aiRequestTimeoutMs: readInt(env, "AI_REQUEST_TIMEOUT_MS", 120_000),
     proxyBaseUrl: readString(env, "PROXY_BASE_URL", ""),
     frontendStaticDir: resolveOptionalPath(readString(env, "FRONTEND_STATIC_DIR", "")),
+    accountProvider: readString(env, "ACCOUNT_PROVIDER", "auto"),
     accountSqlitePath: resolvePath(readString(env, "ACCOUNT_SQLITE_PATH", DEFAULT_ACCOUNT_SQLITE_PATH)),
+    supabaseDbUrl: readString(env, "SUPABASE_DB_URL", readString(env, "SUPABASE_DATABASE_URL", "")),
     accountSessionTtlDays: readInt(env, "ACCOUNT_SESSION_TTL_DAYS", 30),
     discordWidgetUrl: readString(env, "DISCORD_WIDGET_URL", DEFAULT_DISCORD_WIDGET_URL),
     discordInviteUrl: readString(env, "DISCORD_INVITE_URL", DEFAULT_DISCORD_INVITE_URL),
@@ -615,14 +617,11 @@ async function startDiscordBotsIfNeeded(config) {
 }
 
 async function startCommunityStore(config) {
-  const store = new AntarcticCommunityStore({
-    dbPath: config.accountSqlitePath,
-    sessionTtlDays: config.accountSessionTtlDays
-  });
-
+  const runtime = createCommunityStore(config);
+  const store = runtime.store;
   await store.initialize();
   managed.runtime.communityStore = store;
-  managed.runtimeStatus.accounts = `sqlite (${config.accountSqlitePath})`;
+  managed.runtimeStatus.accounts = runtime.status;
 }
 
 async function startAutoPullLoop(config) {
@@ -1014,7 +1013,7 @@ async function routeRequest(req, res, config) {
     sendJson(
       res,
       200,
-      buildAuthenticatedCommunityPayload(session),
+      await buildAuthenticatedCommunityPayload(session),
       config,
       method === "HEAD"
     );
@@ -1028,7 +1027,7 @@ async function routeRequest(req, res, config) {
       return;
     }
 
-    sendJson(res, 200, buildAuthenticatedCommunityPayload(session), config, method === "HEAD");
+    sendJson(res, 200, await buildAuthenticatedCommunityPayload(session), config, method === "HEAD");
     return;
   }
 
@@ -1042,7 +1041,7 @@ async function routeRequest(req, res, config) {
         password: payload.password
       });
       setSessionCookie(res, session.token, config);
-      sendJson(res, 201, buildAuthenticatedCommunityPayload(session), config);
+      sendJson(res, 201, await buildAuthenticatedCommunityPayload(session), config);
     } catch (error) {
       sendJson(res, 400, { ok: false, error: String(error?.message || "Could not create account.") }, config);
     }
@@ -1059,7 +1058,7 @@ async function routeRequest(req, res, config) {
         password: payload.password
       });
       setSessionCookie(res, session.token, config);
-      sendJson(res, 200, buildAuthenticatedCommunityPayload(session), config);
+      sendJson(res, 200, await buildAuthenticatedCommunityPayload(session), config);
     } catch (error) {
       sendJson(res, 401, { ok: false, error: String(error?.message || "Invalid username or password.") }, config);
     }
@@ -1080,7 +1079,7 @@ async function routeRequest(req, res, config) {
     const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
     if (!session) return;
 
-    const users = managed.runtime.communityStore.searchUsers(session.user.id, url.searchParams.get("q") || "");
+    const users = await managed.runtime.communityStore.searchUsers(session.user.id, url.searchParams.get("q") || "");
     sendJson(res, 200, { ok: true, users }, config, method === "HEAD");
     return;
   }
@@ -1089,7 +1088,7 @@ async function routeRequest(req, res, config) {
     const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
     if (!session) return;
 
-    const snapshot = managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
+    const snapshot = await managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
     sendJson(res, 200, { ok: true, user: session.user, ...snapshot }, config, method === "HEAD");
     return;
   }
@@ -1105,7 +1104,7 @@ async function routeRequest(req, res, config) {
         visibility: payload.visibility,
         invitedUsers: payload.invitedUsers
       });
-      const snapshot = managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
+      const snapshot = await managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
       sendJson(res, 201, { ok: true, thread, ...snapshot }, config);
     } catch (error) {
       sendJson(res, 400, { ok: false, error: String(error?.message || "Could not create room.") }, config);
@@ -1121,7 +1120,7 @@ async function routeRequest(req, res, config) {
 
     try {
       const result = await managed.runtime.communityStore.requestDirectThread(session.user.id, payload.username);
-      const snapshot = managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
+      const snapshot = await managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
       sendJson(
         res,
         201,
@@ -1153,7 +1152,7 @@ async function routeRequest(req, res, config) {
         action === "accept"
           ? await managed.runtime.communityStore.acceptDirectRequest(session.user.id, requestId)
           : await managed.runtime.communityStore.denyDirectRequest(session.user.id, requestId);
-      const snapshot = managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
+      const snapshot = await managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
       sendJson(
         res,
         200,
@@ -1179,7 +1178,7 @@ async function routeRequest(req, res, config) {
 
     try {
       const thread = await managed.runtime.communityStore.joinRoom(session.user.id, Number(roomJoinMatch[1]));
-      const snapshot = managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
+      const snapshot = await managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
       sendJson(res, 200, { ok: true, thread, ...snapshot }, config);
     } catch (error) {
       sendJson(res, 404, { ok: false, error: String(error?.message || "Could not join room.") }, config);
@@ -1194,7 +1193,7 @@ async function routeRequest(req, res, config) {
 
     try {
       await managed.runtime.communityStore.leaveRoom(session.user.id, Number(roomLeaveMatch[1]));
-      const snapshot = managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
+      const snapshot = await managed.runtime.communityStore.getCommunitySnapshot(session.user.id);
       sendJson(res, 200, { ok: true, leftThreadId: Number(roomLeaveMatch[1]), ...snapshot }, config);
     } catch (error) {
       sendJson(res, 404, { ok: false, error: String(error?.message || "Could not leave room.") }, config);
@@ -1209,12 +1208,12 @@ async function routeRequest(req, res, config) {
 
     try {
       const threadId = Number(threadMessagesMatch[1]);
-      const thread = managed.runtime.communityStore.getThreadForUser(session.user.id, threadId);
+      const thread = await managed.runtime.communityStore.getThreadForUser(session.user.id, threadId);
       if (!thread) {
         sendJson(res, 404, { ok: false, error: "Conversation not found." }, config, method === "HEAD");
         return;
       }
-      const messages = managed.runtime.communityStore.listMessages(session.user.id, threadId);
+      const messages = await managed.runtime.communityStore.listMessages(session.user.id, threadId);
       sendJson(res, 200, { ok: true, thread, messages }, config, method === "HEAD");
     } catch (error) {
       sendJson(res, 404, { ok: false, error: String(error?.message || "Conversation not found.") }, config, method === "HEAD");
@@ -1231,8 +1230,8 @@ async function routeRequest(req, res, config) {
     try {
       const threadId = Number(threadMessagesMatch[1]);
       const message = await managed.runtime.communityStore.addMessage(session.user.id, threadId, payload.content);
-      const messages = managed.runtime.communityStore.listMessages(session.user.id, threadId);
-      const thread = managed.runtime.communityStore.getThreadForUser(session.user.id, threadId);
+      const messages = await managed.runtime.communityStore.listMessages(session.user.id, threadId);
+      const thread = await managed.runtime.communityStore.getThreadForUser(session.user.id, threadId);
       sendJson(res, 201, { ok: true, thread, message, messages }, config);
     } catch (error) {
       sendJson(res, 400, { ok: false, error: String(error?.message || "Could not send message.") }, config);
@@ -1244,7 +1243,7 @@ async function routeRequest(req, res, config) {
     const session = await requireAuthenticatedSession(req, res, config, method === "HEAD");
     if (!session) return;
 
-    const saves = managed.runtime.communityStore.listGameSaves(session.user.id);
+    const saves = await managed.runtime.communityStore.listGameSaves(session.user.id);
     sendJson(res, 200, { ok: true, saves }, config, method === "HEAD");
     return;
   }
@@ -1256,7 +1255,7 @@ async function routeRequest(req, res, config) {
 
     try {
       const gameKey = decodeURIComponent(saveMatch[1]);
-      const save = managed.runtime.communityStore.getGameSave(session.user.id, gameKey);
+      const save = await managed.runtime.communityStore.getGameSave(session.user.id, gameKey);
       if (!save) {
         sendJson(res, 404, { ok: false, error: "Save not found." }, config, method === "HEAD");
         return;
@@ -2709,7 +2708,7 @@ function buildAnonymousCommunityPayload() {
   };
 }
 
-function buildAuthenticatedCommunityPayload(session) {
+async function buildAuthenticatedCommunityPayload(session) {
   return {
     ok: true,
     authenticated: true,
@@ -2718,7 +2717,7 @@ function buildAuthenticatedCommunityPayload(session) {
     bootstrap:
       session && session.bootstrap && typeof session.bootstrap === "object"
         ? session.bootstrap
-        : managed.runtime.communityStore.getCommunitySnapshot(session.user.id)
+        : await managed.runtime.communityStore.getCommunitySnapshot(session.user.id)
   };
 }
 
@@ -2833,6 +2832,14 @@ async function shutdown(exitCode) {
 
   if (managed.httpServer) {
     await new Promise((resolve) => managed.httpServer.close(resolve));
+  }
+
+  if (managed.runtime.communityStore && typeof managed.runtime.communityStore.close === "function") {
+    try {
+      await managed.runtime.communityStore.close();
+    } catch {
+      // ignore
+    }
   }
 
   for (const entry of managed.processes.reverse()) {
