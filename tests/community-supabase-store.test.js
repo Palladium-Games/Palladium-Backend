@@ -143,6 +143,7 @@ test("supabase store supports private room invites, Antarctic invite DMs, and au
   assert.ok(invitedRoom);
   assert.equal(invitedRoom.invited, true);
   assert.equal(invitedRoom.joined, false);
+  assert.equal(invitedRoom.joinable, true);
 
   const outsiderCatalog = await store.listThreadsForUser(outsider.user.id);
   assert.equal(outsiderCatalog.rooms.some((room) => room.name === "Secret Ops"), false);
@@ -160,6 +161,7 @@ test("supabase store supports private room invites, Antarctic invite DMs, and au
   assert.ok(joinedRoom);
   assert.equal(joinedRoom.joined, true);
   assert.equal(joinedRoom.invited, false);
+  assert.equal(joinedRoom.joinable, true);
 
   await assert.rejects(() => store.addMessage(invited.user.id, privateRoom.id, "shit this is loud"), /Automod muted you for 3 minutes/);
   await assert.rejects(() => store.addMessage(invited.user.id, privateRoom.id, "can anyone hear me"), /You are muted until/);

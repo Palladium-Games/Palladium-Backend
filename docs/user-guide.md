@@ -10,6 +10,7 @@ Daily use:
 3. Start the service with `./start.sh` or `npm start`.
 4. If you prefer doing the install step manually, run `npm ci --omit=dev` before starting.
 5. Verify the runtime with `GET /health` and `GET /api/proxy/health`.
+6. If you are moving an existing SQLite community database into Supabase, run `npm run migrate:supabase` after `SUPABASE_DB_URL` is configured. The script reads `ACCOUNT_SQLITE_PATH` and `SUPABASE_DB_URL` from `config/palladium.env` by default and resets the target Supabase tables before importing.
 
 Supported backend features:
 
@@ -19,6 +20,7 @@ Supported backend features:
 - Scramjet proxy metadata and fetch endpoints
 - backend HTTP proxy fallback at `POST /api/proxy/request?url=...` for sites where `/wisp/` websocket upgrades are unavailable
 - Wisp websocket transport at `/wisp/`
+- frontend shell fallback for `/service/scramjet/...` when the backend is serving `FRONTEND_STATIC_DIR`
 - Supabase-backed account sessions at `GET /api/account/session`, `POST /api/account/signup`, and `POST /api/account/login`
 - one-call community bootstrap at `GET /api/community/bootstrap` plus auth responses that include the same bootstrap payload
 - room chat + DM requests at `GET /api/chat/threads`, `POST /api/chat/rooms`, `POST /api/chat/dms`, `POST /api/chat/dms/:id/accept`, `POST /api/chat/dms/:id/deny`, and `POST /api/chat/threads/:id/leave`
@@ -45,3 +47,4 @@ Before deploying:
 7. Create a private room with invited usernames and confirm the invited user sees the room in the catalog, receives an Antarctic invite DM, and can join while an uninvited user is rejected.
 8. Send a blocked profanity string in chat and confirm the message is rejected with a temporary automod mute response.
 9. If `FRONTEND_STATIC_DIR` is blank, confirm the static frontend is pointed at `https://sethpang.com`.
+10. If you migrated from SQLite to Supabase, log into an old account, open the community chat, verify private room invites still appear as Antarctic DMs, and confirm at least one cloud save is still present.

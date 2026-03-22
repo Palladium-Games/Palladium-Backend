@@ -280,6 +280,7 @@ test("backend supports private-room invites, Antarctic invite DMs, and chat auto
   const invitedRoom = guestThreads.body.rooms.find((room) => room.name === "Secret Ops");
   assert.ok(invitedRoom);
   assert.equal(invitedRoom.invited, true);
+  assert.equal(invitedRoom.joinable, true);
   const antarcticThread = guestThreads.body.threads.find((thread) => thread.type === "direct" && thread.peer && thread.peer.username === "antarctic");
   assert.ok(antarcticThread);
 
@@ -293,6 +294,10 @@ test("backend supports private-room invites, Antarctic invite DMs, and chat auto
   });
   assert.equal(outsiderJoin.status, 404);
   assert.match(String(outsiderJoin.body.error || ""), /invite-only/i);
+
+  const outsiderThreads = await fetchJson(`${base}/api/chat/threads`, { headers: outsiderHeaders });
+  assert.equal(outsiderThreads.status, 200);
+  assert.equal(outsiderThreads.body.rooms.some((room) => room.name === "Secret Ops"), false);
 
   const guestJoin = await fetchJson(`${base}/api/chat/threads/${privateRoom.body.thread.id}/join`, {
     method: "POST",

@@ -39,6 +39,14 @@ For community accounts/chat/cloud saves, production should use:
 
 `ACCOUNT_PROVIDER=auto` keeps SQLite as the local fallback when `SUPABASE_DB_URL` is blank, which is useful for tests and temporary local runs.
 
+If you already have live SQLite accounts/chat/save data, migrate it into Supabase with:
+
+```bash
+npm run migrate:supabase
+```
+
+You can override the defaults with `--config`, `--sqlite`, `--supabase`, or keep the target intact with `--no-reset-target`, but the normal production move is to let the script reset the Supabase tables and copy the full SQLite dataset over exactly once.
+
 Production target:
 
 - point `sethpang.com` at this backend
@@ -77,6 +85,7 @@ Auth bootstrap behavior:
 - chat messages stay capped at 2000 characters, and the built-in automod applies a short mute when blocked profanity is sent.
 - AI chat requests are normalized for low-latency shell responses by default, with shorter context/prediction limits and long-lived Ollama keep-alive reuse.
 - The static frontend prefers Wisp for Scramjet, but can fall back to `POST /api/proxy/request` when a reverse proxy is not forwarding `/wisp/` websocket upgrades correctly.
+- when `FRONTEND_STATIC_DIR` is serving the frontend shell, `/service/scramjet/...` falls back to the shell instead of 404ing, so the proxy bootstrap survives encoded target URLs with dots in them.
 
 Docs:
 

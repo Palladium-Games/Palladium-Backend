@@ -150,6 +150,12 @@ test("backend can optionally serve a separate static frontend checkout", async (
   assert.equal(shellFallbackResponse.status, 200);
   assert.match(shellFallbackResponse.headers.get("content-type") || "", /text\/html/);
 
+  const scramjetServiceResponse = await fetch(
+    `${backendBase}/service/scramjet/${encodeURIComponent("https://duckduckgo.com/?q=hi")}`
+  );
+  assert.equal(scramjetServiceResponse.status, 200);
+  assert.match(scramjetServiceResponse.headers.get("content-type") || "", /text\/html/);
+
   const traversalResponse = await fetch(`${backendBase}/%2e%2e/%2e%2e/package.json`);
   assert.equal(traversalResponse.status, 404);
 });

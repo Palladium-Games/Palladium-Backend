@@ -150,6 +150,7 @@ test("community store supports private room invites, Antarctic invite DMs, and a
   assert.ok(invitedRoom);
   assert.equal(invitedRoom.invited, true);
   assert.equal(invitedRoom.joined, false);
+  assert.equal(invitedRoom.joinable, true);
 
   const outsiderCatalog = store.listThreadsForUser(outsider.user.id);
   assert.equal(outsiderCatalog.rooms.some((room) => room.name === "Secret Ops"), false);
@@ -170,6 +171,7 @@ test("community store supports private room invites, Antarctic invite DMs, and a
   assert.ok(joinedRoom);
   assert.equal(joinedRoom.joined, true);
   assert.equal(joinedRoom.invited, false);
+  assert.equal(joinedRoom.joinable, true);
 
   await assert.rejects(
     () => store.addMessage(invited.user.id, privateRoom.id, "shit this is loud"),

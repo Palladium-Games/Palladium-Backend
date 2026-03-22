@@ -8,7 +8,10 @@ const filesToCheck = [
   path.join(backendDir, "apps.js"),
   path.join(backendDir, "server.js"),
   path.join(backendDir, "scripts", "ensure-runtime-deps.js"),
-  path.join(backendDir, "services", "community-sqlite-store.js")
+  path.join(backendDir, "scripts", "migrate-community-to-supabase.js"),
+  path.join(backendDir, "services", "community-migration.js"),
+  path.join(backendDir, "services", "community-sqlite-store.js"),
+  path.join(backendDir, "services", "community-supabase-store.js")
 ];
 
 for (const filePath of filesToCheck) {

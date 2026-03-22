@@ -182,21 +182,27 @@ function toPublicDirectRequest(row) {
  *   memberCount: number,
  *   joined: boolean,
  *   invited: boolean,
+ *   joinable: boolean,
  *   ownerUserId: number,
  *   createdAt: string,
  *   updatedAt: string
  * }} Public room representation.
  */
 function toPublicRoom(row) {
+  const joined = Boolean(Number(row.joined || 0));
+  const invited = Boolean(Number(row.invited || 0));
+  const visibility = String(row.visibility || "public");
+  const ownerUserId = Number(row.owner_user_id || 0);
   return {
     id: Number(row.id),
     type: "room",
     name: String(row.name || ""),
-    visibility: String(row.visibility || "public"),
+    visibility,
     memberCount: Number(row.member_count || 0),
-    joined: Boolean(Number(row.joined || 0)),
-    invited: Boolean(Number(row.invited || 0)),
-    ownerUserId: Number(row.owner_user_id || 0),
+    joined,
+    invited,
+    joinable: joined || invited || visibility === "public",
+    ownerUserId,
     createdAt: String(row.created_at || ""),
     updatedAt: String(row.updated_at || "")
   };

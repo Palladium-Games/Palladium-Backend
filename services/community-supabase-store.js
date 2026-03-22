@@ -163,17 +163,33 @@ function toPublicDirectRequest(row) {
  * Converts a raw room row into the public room catalog shape.
  *
  * @param {object} row - Raw database row.
- * @returns {object} Public room representation.
+ * @returns {{
+ *   id: number,
+ *   type: "room",
+ *   name: string,
+ *   visibility: string,
+ *   memberCount: number,
+ *   joined: boolean,
+ *   invited: boolean,
+ *   joinable: boolean,
+ *   ownerUserId: number,
+ *   createdAt: string,
+ *   updatedAt: string
+ * }} Public room representation.
  */
 function toPublicRoom(row) {
+  const joined = Boolean(row.joined);
+  const invited = Boolean(row.invited);
+  const visibility = String(row.visibility || "public");
   return {
     id: Number(row.id),
     type: "room",
     name: String(row.name || ""),
-    visibility: String(row.visibility || "public"),
+    visibility,
     memberCount: Number(row.member_count || 0),
-    joined: Boolean(row.joined),
-    invited: Boolean(row.invited),
+    joined,
+    invited,
+    joinable: joined || invited || visibility === "public",
     ownerUserId: Number(row.owner_user_id || 0),
     createdAt: String(row.created_at || ""),
     updatedAt: String(row.updated_at || "")

@@ -22,6 +22,7 @@ const DEFAULT_SESSION_COOKIE_NAME = "antarctic_session";
 const MAX_PROXY_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
 const PROXY_REQUEST_HEADER_METHOD = "x-antarctic-proxy-method";
 const PROXY_REQUEST_HEADER_HEADERS = "x-antarctic-proxy-headers";
+const SCRAMJET_SERVICE_PREFIX = "/service/scramjet";
 const SCRAMJET_WISP_PATH = "/wisp/";
 const STATIC_CONTENT_TYPES = Object.freeze({
   ".css": "text/css; charset=utf-8",
@@ -1668,6 +1669,9 @@ async function safeStat(filePath) {
 function shouldServeFrontendShell(pathname) {
   const normalized = String(pathname || "/").replace(/\/+$/, "");
   if (!normalized || normalized === "/") {
+    return true;
+  }
+  if (normalized === SCRAMJET_SERVICE_PREFIX || normalized.startsWith(`${SCRAMJET_SERVICE_PREFIX}/`)) {
     return true;
   }
   return path.extname(normalized) === "";
