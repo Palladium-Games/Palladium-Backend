@@ -1601,6 +1601,10 @@ async function tryServeFrontendStatic(req, res, config, pathname, headOnly) {
     return true;
   }
 
+  if (tryRedirectScramjetNavigation(req, res, config, pathname, headOnly)) {
+    return true;
+  }
+
   if (!shouldServeFrontendShell(pathname)) {
     return false;
   }
@@ -1671,10 +1675,50 @@ function shouldServeFrontendShell(pathname) {
   if (!normalized || normalized === "/") {
     return true;
   }
-  if (normalized === SCRAMJET_SERVICE_PREFIX || normalized.startsWith(`${SCRAMJET_SERVICE_PREFIX}/`)) {
-    return true;
-  }
   return path.extname(normalized) === "";
+}
+
+function isScramjetServicePath(pathname) {
+  const normalized = String(pathname || "").replace(/\/+$/, "");
+  return normalized === SCRAMJET_SERVICE_PREFIX || normalized.startsWith(`${SCRAMJET_SERVICE_PREFIX}/`);
+}
+
+function decodeScramjetTarget(pathname) {
+  if (!isScramjetServicePath(pathname)) {
+    return "";
+  }
+
+  const rawTarget = String(pathname || "").slice(SCRAMJET_SERVICE_PREFIX.length).replace(/^\/+/, "");
+  if (!rawTarget) {
+    return "";
+  }
+
+  try {
+    return normalizeUserUrl(decodeURIComponent(rawTarget));
+  } catch {
+    return "";
+  }
+}
+
+function isHtmlNavigationRequest(req) {
+  const accept = String(req && req.headers ? req.headers.accept || "" : "").toLowerCase();
+  const destination = String(req && req.headers ? req.headers["sec-fetch-dest"] || "" : "").toLowerCase();
+
+  return accept.includes("text/html") || destination === "document" || destination === "iframe";
+}
+
+function buildShellRedirectLocation(uri) {
+  return `/?uri=${encodeURIComponent(String(uri || ""))}`;
+}
+
+function tryRedirectScramjetNavigation(req, res, config, pathname, headOnly) {
+  const target = decodeScramjetTarget(pathname);
+  if (!target || !isHtmlNavigationRequest(req)) {
+    return false;
+  }
+
+  sendRedirect(res, 302, buildShellRedirectLocation(target), config, headOnly);
+  return true;
 }
 
 function shouldDisableStaticCache(filePath, contentType, config) {
@@ -2799,6 +2843,20 @@ function sendText(res, status, message, config) {
     "content-length": String(body.length)
   });
   res.end(body);
+}
+
+function sendRedirect(res, status, location, config, headOnly = false) {
+  addCors(res, config);
+  addSecurityHeaders(res);
+  res.writeHead(status, {
+    location: String(location || "/"),
+    "cache-control": "no-cache"
+  });
+  if (headOnly) {
+    res.end();
+    return;
+  }
+  res.end();
 }
 
 function sendJson(res, status, payload, config, headOnly = false) {
