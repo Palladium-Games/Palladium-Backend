@@ -8,7 +8,7 @@ const { spawn } = require("node:child_process");
 
 const BACKEND_DIR = path.resolve(__dirname, "..");
 
-test("backend exposes Discord, AI, proxy, account, chat, and save surfaces", async (t) => {
+test("backend exposes Discord, AI, account, chat, and save surfaces while proxy mode is disabled", async (t) => {
   const port = await getOpenPort();
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "antarctic-backend-surface-"));
   const configPath = path.join(tempDir, "palladium.env");
@@ -43,8 +43,6 @@ test("backend exposes Discord, AI, proxy, account, chat, and save surfaces", asy
   assert.equal(health.ok, true);
   assert.equal(health.service, "antarctic-backend");
   assert.deepEqual(health.features, [
-    "api/proxy/fetch",
-    "wisp",
     "api/ai/chat",
     "api/discord/widget",
     "link-check",

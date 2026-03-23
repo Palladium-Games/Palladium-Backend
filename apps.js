@@ -906,8 +906,6 @@ async function routeRequest(req, res, config) {
         time: new Date().toISOString(),
         runtime: managed.runtimeStatus,
         features: [
-          "api/proxy/fetch",
-          "wisp",
           "api/ai/chat",
           "api/discord/widget",
           "link-check",
@@ -923,18 +921,14 @@ async function routeRequest(req, res, config) {
   }
 
   if (url.pathname === "/api/proxy/health") {
-    const backendOrigin = requestOrigin(req);
     sendJson(
       res,
-      200,
+      503,
       {
-        ok: true,
-        service: "scramjet",
-        transport: "wisp",
-        message: "Scramjet proxy transport is ready on the backend.",
-        backendBase: backendOrigin,
-        websocketPath: SCRAMJET_WISP_PATH,
-        websocketUrl: toWebSocketUrl(backendOrigin, SCRAMJET_WISP_PATH)
+        ok: false,
+        service: "disabled",
+        transport: "disabled",
+        message: "Built-in web browsing is temporarily disabled."
       },
       config
     );
@@ -964,14 +958,14 @@ async function routeRequest(req, res, config) {
         ok: true,
         backendBase: backendOrigin,
         services: {
-          proxy: "/api/proxy/fetch",
-          proxyFetch: "/api/proxy/fetch",
-          proxyRequest: "/api/proxy/request",
+          proxy: "",
+          proxyFetch: "",
+          proxyRequest: "",
           proxyBase,
-          proxyMode: "scramjet",
-          proxyTransport: "wisp",
-          wispPath: SCRAMJET_WISP_PATH,
-          wispUrl: toWebSocketUrl(backendOrigin, SCRAMJET_WISP_PATH),
+          proxyMode: "disabled",
+          proxyTransport: "disabled",
+          wispPath: "",
+          wispUrl: "",
           aiChat: "/api/ai/chat",
           defaultAiModel: config.ollamaModel,
           accountSession: "/api/account/session",

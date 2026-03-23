@@ -42,7 +42,7 @@ test("frontend directory contains the required static entrypoints", () => {
   }
 });
 
-test("frontend shell ships the built-in antarctic routes and proxy runtime assets", () => {
+test("frontend shell ships the built-in antarctic routes without loading proxy runtime scripts", () => {
   if (!HAS_FRONTEND_DIR) {
     assert.ok(true, "Backend-only checkout does not ship the frontend directory.");
     return;
@@ -54,8 +54,9 @@ test("frontend shell ships the built-in antarctic routes and proxy runtime asset
   assert.match(shellPage, /antarctic:\/\/account/);
   assert.match(shellPage, /antarctic:\/\/chats/);
   assert.match(shellPage, /antarctic:\/\/settings/);
-  assert.match(shellPage, /scram\/scramjet\.all\.js/);
-  assert.match(shellPage, /baremux\/index\.js/);
+  assert.doesNotMatch(shellPage, /scram\/scramjet\.all\.js/);
+  assert.doesNotMatch(shellPage, /baremux\/index\.js/);
+  assert.match(shellPage, /Built-in web browsing is temporarily disabled/);
 });
 
 test("frontend root only keeps one app shell html entrypoint", () => {

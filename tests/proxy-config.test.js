@@ -6,11 +6,10 @@ const path = require("node:path");
 const net = require("node:net");
 const http = require("node:http");
 const { spawn } = require("node:child_process");
-const WebSocket = require("ws");
 
 const BACKEND_DIR = path.resolve(__dirname, "..");
 
-test("backend exposes Scramjet proxy metadata and accepts Wisp upgrades", async (t) => {
+test("backend reports that built-in web browsing is disabled", async (t) => {
   const port = await getOpenPort();
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "antarctic-proxy-config-"));
   const configPath = path.join(tempDir, "palladium.env");
@@ -55,14 +54,13 @@ test("backend exposes Scramjet proxy metadata and accepts Wisp upgrades", async 
   await waitForServer(`${backendBase}/health`, output);
 
   const proxyHealthResponse = await fetch(`${backendBase}/api/proxy/health`);
-  assert.equal(proxyHealthResponse.status, 200);
+  assert.equal(proxyHealthResponse.status, 503);
 
   const proxyHealth = await proxyHealthResponse.json();
-  assert.equal(proxyHealth.ok, true);
-  assert.equal(proxyHealth.service, "scramjet");
-  assert.equal(proxyHealth.transport, "wisp");
-  assert.equal(proxyHealth.websocketPath, "/wisp/");
-  assert.equal(proxyHealth.websocketUrl, `ws://127.0.0.1:${port}/wisp/`);
+  assert.equal(proxyHealth.ok, false);
+  assert.equal(proxyHealth.service, "disabled");
+  assert.equal(proxyHealth.transport, "disabled");
+  assert.match(proxyHealth.message, /temporarily disabled/i);
 
   const configResponse = await fetch(`${backendBase}/api/config/public`);
   assert.equal(configResponse.status, 200);
@@ -70,11 +68,13 @@ test("backend exposes Scramjet proxy metadata and accepts Wisp upgrades", async 
   const payload = await configResponse.json();
   assert.equal(payload.ok, true);
   assert.equal(payload.backendBase, backendBase);
-  assert.equal(payload.services.proxyMode, "scramjet");
-  assert.equal(payload.services.proxyTransport, "wisp");
-  assert.equal(payload.services.wispPath, "/wisp/");
-  assert.equal(payload.services.wispUrl, `ws://127.0.0.1:${port}/wisp/`);
-  assert.equal(payload.services.proxyRequest, "/api/proxy/request");
+  assert.equal(payload.services.proxyMode, "disabled");
+  assert.equal(payload.services.proxyTransport, "disabled");
+  assert.equal(payload.services.wispPath, "");
+  assert.equal(payload.services.wispUrl, "");
+  assert.equal(payload.services.proxy, "");
+  assert.equal(payload.services.proxyFetch, "");
+  assert.equal(payload.services.proxyRequest, "");
   assert.equal(payload.services.aiChat, "/api/ai/chat");
   assert.equal(payload.services.accountSession, "/api/account/session");
   assert.equal(payload.services.communityBootstrap, "/api/community/bootstrap");
@@ -86,8 +86,6 @@ test("backend exposes Scramjet proxy metadata and accepts Wisp upgrades", async 
   assert.ok(!("monochromeBase" in payload.services));
   assert.equal(payload.discord.inviteUrl, "https://discord.gg/FNACSCcE26");
   assert.equal(payload.discord.widgetUrl, "https://discord.com/api/guilds/1479914434460913707/widget.json");
-
-  await expectWebSocketOpen(`ws://127.0.0.1:${port}/wisp/`);
 });
 
 test("backend forwards arbitrary upstream requests through proxy request bridge", async (t) => {
@@ -227,27 +225,6 @@ async function waitForServer(url, output) {
   }
 
   throw new Error(`Backend server did not start in time.\n${output.join("")}`);
-}
-
-async function expectWebSocketOpen(url) {
-  await new Promise((resolve, reject) => {
-    const socket = new WebSocket(url);
-    const timer = setTimeout(() => {
-      socket.terminate();
-      reject(new Error(`Timed out waiting for websocket open on ${url}`));
-    }, 5_000);
-
-    socket.once("open", () => {
-      clearTimeout(timer);
-      socket.close();
-      resolve();
-    });
-
-    socket.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
 }
 
 async function waitForExit(child, timeoutMs) {
