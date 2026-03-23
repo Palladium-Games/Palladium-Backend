@@ -59,7 +59,7 @@ Proxy runtime maintenance:
 
 Production target:
 
-- point `sethpang.com` at this backend
+- point `api.antarctic.games` at this backend
 - keep `config/palladium.env` on the server
 - or serve the separate frontend checkout from the same site with `FRONTEND_STATIC_DIR`
 

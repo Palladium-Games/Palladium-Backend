@@ -109,13 +109,13 @@ test("apps base resolution accepts Antarctic env aliases", () => {
   const previousPalladium = process.env.PALLADIUM_APPS_URL;
   const previousBackend = process.env.BACKEND_BASE_URL;
 
-  process.env.ANTARCTIC_APPS_URL = "api.sethpang.com";
+  process.env.ANTARCTIC_APPS_URL = "api.antarctic.games";
   process.env.PALLADIUM_APPS_URL = "";
   process.env.BACKEND_BASE_URL = "";
 
   try {
     const bases = resolveAppsBases();
-    assert.equal(bases[0], "http://api.sethpang.com");
+    assert.equal(bases[0], "http://api.antarctic.games");
   } finally {
     restoreEnv("ANTARCTIC_APPS_URL", previousAntarctic);
     restoreEnv("PALLADIUM_APPS_URL", previousPalladium);

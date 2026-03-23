@@ -1,6 +1,6 @@
 # User Guide
 
-This backend is the API side of Antarctic Games. It is meant to run behind `sethpang.com`, either by directly serving the separate frontend checkout through `FRONTEND_STATIC_DIR` or by answering the `/api/...` routes for a static frontend hosted elsewhere.
+This backend is the API side of Antarctic Games. It is meant to run behind `api.antarctic.games`, either by directly serving the separate frontend checkout through `FRONTEND_STATIC_DIR` or by answering the `/api/...` routes for a static frontend hosted elsewhere.
 
 Daily use:
 
@@ -48,7 +48,7 @@ Before deploying:
 6. Create two throwaway accounts and confirm a DM request appears in the target user's `incomingDirectRequests`, can be accepted or denied, and accepted requests become normal direct-message threads in Supabase.
 7. Create a private room with invited usernames and confirm the invited user sees the room in the catalog, receives an Antarctic invite DM, and can join while an uninvited user is rejected.
 8. Send a blocked profanity string in chat and confirm the message is rejected with a temporary automod mute response.
-9. If `FRONTEND_STATIC_DIR` is blank, confirm the static frontend is pointed at `https://sethpang.com`.
+9. If `FRONTEND_STATIC_DIR` is blank, confirm the static frontend is pointed at `https://api.antarctic.games`.
 10. If you migrated from SQLite to Supabase, log into an old account, open the community chat, verify private room invites still appear as Antarctic DMs, and confirm at least one cloud save is still present.
 11. If a sibling frontend checkout exists, confirm `npm run verify` passes after any proxy-runtime package update; it now fails if the vendored frontend Scramjet/BareMux/libcurl assets drift out of sync with the backend packages.
 12. If Scramjet still behaves strangely after a normal refresh, run `npm run reinstall:frontend-proxy` once so the backend deletes the installed proxy packages, redownloads them, and recopies the frontend runtime from scratch.
