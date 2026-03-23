@@ -11,7 +11,7 @@ Daily use:
 4. If you prefer doing the install step manually, run `npm ci --omit=dev` before starting.
 5. Verify the runtime with `GET /health` and `GET /api/proxy/health`.
 6. If you are moving an existing SQLite community database into Supabase, run `npm run migrate:supabase` after `SUPABASE_DB_URL` is configured. The script reads `ACCOUNT_SQLITE_PATH` and `SUPABASE_DB_URL` from `config/palladium.env` by default and resets the target Supabase tables before importing.
-7. If you want to refresh the static proxy runtime shipped to the sibling frontend checkout, run `npm run refresh:frontend-proxy`. Use `npm run sync:frontend-proxy` when you only need to copy the current installed assets without wiping the frontend runtime folders first.
+7. If you want to refresh the static proxy runtime shipped to the sibling frontend checkout, run `npm run refresh:frontend-proxy`. Use `npm run sync:frontend-proxy` when you only need to copy the current installed assets without wiping the frontend runtime folders first. The backend will look for sibling frontends named `Antarctic-Games`, `Antarctic-Frontend`, `palladium-frontend`, or `frontend`.
 8. If you want to completely delete and redownload the MercuryWorkshop proxy runtime before resyncing the frontend, run `npm run reinstall:frontend-proxy`.
 
 Supported backend features:

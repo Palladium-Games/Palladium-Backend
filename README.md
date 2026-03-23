@@ -54,6 +54,7 @@ Proxy runtime maintenance:
 - `npm run sync:frontend-proxy` copies the installed Scramjet, BareMux, and libcurl runtime files into the sibling frontend checkout.
 - `npm run refresh:frontend-proxy` first removes the vendored frontend proxy-runtime folders, then recopies those assets fresh.
 - `npm run reinstall:frontend-proxy` removes the installed MercuryWorkshop proxy packages from the backend, redownloads them with `npm install --no-save`, then wipes and recopies the frontend runtime folders.
+- frontend discovery for those commands now supports sibling checkouts named `Antarctic-Games`, `Antarctic-Frontend`, `palladium-frontend`, or `frontend`
 - `npm run verify` now checks that the vendored frontend proxy runtime still matches the backend package sources whenever a sibling frontend checkout exists.
 
 Production target:
