@@ -9,7 +9,9 @@ const REPO_DIR = HAS_BACKEND_ONLY_LAYOUT ? BACKEND_ONLY_ROOT : path.resolve(__di
 const BACKEND_DIR = HAS_BACKEND_ONLY_LAYOUT ? BACKEND_ONLY_ROOT : path.join(REPO_DIR, "backend");
 const FRONTEND_CANDIDATES = [
   path.join(REPO_DIR, "frontend"),
+  path.join(REPO_DIR, "antarctic-frontend"),
   path.join(REPO_DIR, "palladium-frontend"),
+  path.resolve(BACKEND_DIR, "..", "antarctic-frontend"),
   path.resolve(BACKEND_DIR, "..", "palladium-frontend")
 ];
 const FRONTEND_DIR = FRONTEND_CANDIDATES.find((candidate) => fs.existsSync(path.join(candidate, "index.html"))) || "";
@@ -42,7 +44,7 @@ test("frontend directory contains the required static entrypoints", () => {
   }
 });
 
-test("frontend shell ships the built-in antarctic routes without loading proxy runtime scripts", () => {
+test("frontend shell ships the built-in antarctic routes with the bundled proxy runtime", () => {
   if (!HAS_FRONTEND_DIR) {
     assert.ok(true, "Backend-only checkout does not ship the frontend directory.");
     return;
@@ -54,8 +56,8 @@ test("frontend shell ships the built-in antarctic routes without loading proxy r
   assert.match(shellPage, /antarctic:\/\/account/);
   assert.match(shellPage, /antarctic:\/\/chats/);
   assert.match(shellPage, /antarctic:\/\/settings/);
-  assert.doesNotMatch(shellPage, /scram\/scramjet\.all\.js/);
-  assert.doesNotMatch(shellPage, /baremux\/index\.js/);
+  assert.match(shellPage, /scram\/scramjet\.all\.js/);
+  assert.match(shellPage, /baremux\/index\.js/);
   assert.match(shellPage, /Built-in web browsing is temporarily disabled/);
 });
 

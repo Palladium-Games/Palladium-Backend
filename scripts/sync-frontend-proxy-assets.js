@@ -42,6 +42,7 @@ function resolveFrontendDir(baseDir = BACKEND_DIR) {
   const candidates = [
     path.resolve(baseDir, "..", "Antarctic-Games"),
     path.resolve(baseDir, "..", "Antarctic-Frontend"),
+    path.resolve(baseDir, "..", "antarctic-frontend"),
     path.resolve(baseDir, "..", "palladium-frontend"),
     path.resolve(baseDir, "..", "frontend")
   ];
@@ -53,7 +54,7 @@ function resolveFrontendDir(baseDir = BACKEND_DIR) {
   }
 
   throw new Error(
-    "Could not find a sibling frontend checkout. Expected index.html under ../Antarctic-Games, ../Antarctic-Frontend, ../palladium-frontend, or ../frontend."
+    "Could not find a sibling frontend checkout. Expected index.html under ../Antarctic-Games, ../Antarctic-Frontend, ../antarctic-frontend, ../palladium-frontend, or ../frontend."
   );
 }
 
