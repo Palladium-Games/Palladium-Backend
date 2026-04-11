@@ -62,6 +62,8 @@ Production target:
 - point `api.antarctic.games` at this backend
 - keep `config/palladium.env` on the server
 - or serve the separate frontend checkout from the same site with `FRONTEND_STATIC_DIR`
+- use `deploy/antarctic-backend.service` when `/opt/Antarctic-Backend` should be managed by systemd
+- use `deploy/nginx/antarctic.games.conf` when nginx should TLS-terminate and reverse proxy `antarctic.games`, `www.antarctic.games`, and `api.antarctic.games` to the backend
 
 Important routes:
 
@@ -102,3 +104,4 @@ Docs:
 
 - user guide: [docs/user-guide.md](docs/user-guide.md)
 - agent guide: [docs/agent-guide.md](docs/agent-guide.md)
+- main-site cutover: [docs/main-site-cutover.md](docs/main-site-cutover.md)

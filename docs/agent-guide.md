@@ -19,7 +19,8 @@ When changing the backend:
 7. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
 8. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.
 9. Keep the vendored frontend Scramjet/BareMux/libcurl runtime aligned with the backend package sources. Use `npm run refresh:frontend-proxy` when you need a clean wipe-and-resync, `npm run reinstall:frontend-proxy` when you need to delete and redownload the backend MercuryWorkshop packages first, and keep the sync/check tooling covered by tests.
-10. End every task with `npm run verify`.
+10. Keep `deploy/antarctic-backend.service`, `deploy/nginx/antarctic.games.conf`, and `docs/main-site-cutover.md` aligned with the real production serving model whenever main-site routing changes.
+11. End every task with `npm run verify`.
 
 Regression expectations:
 
