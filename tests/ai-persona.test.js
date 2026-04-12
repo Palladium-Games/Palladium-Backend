@@ -40,9 +40,12 @@ function loadAiHelpers() {
     extractFunctionSource("buildAntarcticAiSystemPrompt"),
     extractFunctionSource("injectAntarcticAiSystemPrompt"),
     extractFunctionSource("flattenContent"),
+    extractFunctionSource("getLatestUserAiMessage"),
+    extractFunctionSource("buildAntarcticAiDirectResponse"),
     extractFunctionSource("buildPromptFromMessages"),
     extractFunctionSource("buildGeneratePayload"),
     "this.normalizeAiPayload = normalizeAiPayload;",
+    "this.buildAntarcticAiDirectResponse = buildAntarcticAiDirectResponse;",
     "this.buildGeneratePayload = buildGeneratePayload;"
   ].join("\n\n");
 
@@ -87,4 +90,30 @@ test("normalizeAiPayload preserves existing system instructions behind the Antar
   const generatePayload = buildGeneratePayload(normalized, "qwen3.5:0.8b");
   assert.match(generatePayload.prompt, /System: You are Antarctic AI/);
   assert.match(generatePayload.prompt, /System: .*Always answer in Markdown\./s);
+});
+
+test("buildAntarcticAiDirectResponse answers identity questions as Antarctic AI", () => {
+  const { buildAntarcticAiDirectResponse } = loadAiHelpers();
+
+  const reply = buildAntarcticAiDirectResponse([
+    { role: "user", content: "who are you?" }
+  ]);
+
+  assert.equal(
+    reply,
+    "I am Antarctic AI, the built-in assistant for Antarctic Games. I can help with games on the site, browsing, and general questions."
+  );
+});
+
+test("buildAntarcticAiDirectResponse answers model questions without leading with Qwen", () => {
+  const { buildAntarcticAiDirectResponse } = loadAiHelpers();
+
+  const reply = buildAntarcticAiDirectResponse([
+    { role: "user", content: "what model are you?" }
+  ]);
+
+  assert.equal(
+    reply,
+    "I am Antarctic AI, the built-in assistant for Antarctic Games. I am powered by the site's configured AI backend."
+  );
 });

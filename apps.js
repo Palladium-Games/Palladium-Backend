@@ -1537,6 +1537,16 @@ async function routeRequest(req, res, config) {
     }
 
     const normalized = normalizeAiPayload(parsed, config.ollamaModel);
+    const directResponse = buildAntarcticAiDirectResponse(normalized.messages);
+    if (directResponse) {
+      if (normalized.stream) {
+        sendInlineAiStream(res, config, normalized.model, directResponse, "inline");
+      } else {
+        sendJson(res, 200, buildAssistantPayload(normalized.model, directResponse, "inline"), config);
+      }
+      return;
+    }
+
     const baseUrl = config.ollamaBaseUrl.replace(/\/+$/, "");
     const aiTimeoutMs = Math.max(15_000, Number(config.aiRequestTimeoutMs) || 120_000);
     const chatTimeoutMs = aiTimeoutMs;
@@ -2438,6 +2448,54 @@ function flattenContent(contentValue) {
   return "";
 }
 
+function getLatestUserAiMessage(messages) {
+  if (!Array.isArray(messages)) {
+    return "";
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || typeof message !== "object") {
+      continue;
+    }
+    if (String(message.role || "").trim().toLowerCase() !== "user") {
+      continue;
+    }
+
+    const content = flattenContent(message.content);
+    if (content) {
+      return content;
+    }
+  }
+
+  return "";
+}
+
+function buildAntarcticAiDirectResponse(messages) {
+  const latestUserMessage = getLatestUserAiMessage(messages).toLowerCase();
+  if (!latestUserMessage) {
+    return "";
+  }
+
+  if (
+    /\bwho are you\b/.test(latestUserMessage) ||
+    /\bwhat are you\b/.test(latestUserMessage) ||
+    /\bwhat(?:'s| is) your name\b/.test(latestUserMessage)
+  ) {
+    return "I am Antarctic AI, the built-in assistant for Antarctic Games. I can help with games on the site, browsing, and general questions.";
+  }
+
+  if (
+    /\bwhat model are you\b/.test(latestUserMessage) ||
+    /\bwhat model powers you\b/.test(latestUserMessage) ||
+    /\bwhich model are you\b/.test(latestUserMessage)
+  ) {
+    return "I am Antarctic AI, the built-in assistant for Antarctic Games. I am powered by the site's configured AI backend.";
+  }
+
+  return "";
+}
+
 function extractAssistantText(payload) {
   if (!payload || typeof payload !== "object") return "";
 
@@ -2526,6 +2584,21 @@ async function postJsonWithTimeout(targetUrl, payload, timeoutMs) {
       error: timeoutLike ? "AI upstream request timed out." : message
     };
   }
+}
+
+function sendInlineAiStream(res, config, model, text, source) {
+  addCors(res, config);
+  addSecurityHeaders(res);
+  res.writeHead(200, {
+    "content-type": "application/x-ndjson; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    "x-accel-buffering": "no"
+  });
+  res.write(`${JSON.stringify({ ok: true, delta: String(text || ""), done: false })}\n`);
+  res.write(
+    `${JSON.stringify({ ok: true, done: true, source: source || "inline", model: String(model || "") })}\n`
+  );
+  res.end();
 }
 
 async function streamAiChat(req, res, config, payload, targetUrl, timeoutMs) {

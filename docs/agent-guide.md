@@ -16,7 +16,7 @@ When changing the backend:
    If a migration path changes, update `scripts/migrate-community-to-supabase.js`, `services/community-migration.js`, and the migration tests in the same patch.
    Keep Supabase TLS handling compatible with real production URLs too: `sslmode=require` should stay usable without forcing operators to hand-edit Node TLS flags, while `verify-full` remains the strict option for trusted CA setups.
 6. Keep AI defaults biased toward fast interactive shell replies unless the user explicitly asks for slower/deeper reasoning.
-   Keep the backend-owned Antarctic AI identity prompt in place so base models do not answer identity questions as the upstream vendor/model first.
+   Keep the backend-owned Antarctic AI identity behavior in place so direct identity questions do not answer as the upstream vendor/model first.
 7. Prefer compatibility-preserving changes for existing env vars unless the user explicitly asks for breaking renames.
 8. Keep `./start.sh` first-boot safe on clean machines, including dependency bootstrap behavior.
 9. Keep the vendored frontend Scramjet/BareMux/libcurl runtime aligned with the backend package sources. Use `npm run refresh:frontend-proxy` when you need a clean wipe-and-resync, `npm run reinstall:frontend-proxy` when you need to delete and redownload the backend MercuryWorkshop packages first, and keep the sync/check tooling covered by tests.

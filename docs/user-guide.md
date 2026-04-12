@@ -20,7 +20,7 @@ Supported backend features:
 - Discord widget aggregation and Discord bot sidecars
 - AI chat requests through Ollama at `POST /api/ai/chat`
 - AI chat defaults are tuned for fast shell replies, so the frontend can stream shorter low-latency answers without extra per-request config
-- the backend always prepends an Antarctic AI identity/system prompt so "who are you?" style questions answer as Antarctic AI instead of exposing the raw upstream model brand first
+- the backend owns Antarctic AI identity responses, so direct "who are you?" style questions answer as Antarctic AI instead of exposing the raw upstream model brand first
 - Scramjet proxy metadata and fetch endpoints
 - backend HTTP proxy fallback at `POST /api/proxy/request?url=...`, advertised as the ready startup transport so the shell can boot browsing without waiting on a websocket probe
 - Wisp websocket transport at `/wisp/`
