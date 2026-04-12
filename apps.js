@@ -2318,6 +2318,8 @@ function normalizeAiPayload(payload, fallbackModel) {
     }
   }
 
+  normalized.messages = injectAntarcticAiSystemPrompt(normalized.messages);
+
   if (typeof normalized.stream !== "boolean") {
     normalized.stream = false;
   }
@@ -2353,6 +2355,62 @@ function normalizeAiPayload(payload, fallbackModel) {
   }
 
   return normalized;
+}
+
+function buildAntarcticAiSystemPrompt() {
+  return [
+    "You are Antarctic AI, the built-in assistant for Antarctic Games.",
+    "When a user asks who you are, identify yourself as Antarctic AI first.",
+    "For identity questions, start the reply with: I am Antarctic AI, the built-in assistant for Antarctic Games.",
+    "Do not introduce yourself as Qwen, Tongyi Lab, or any other upstream model or lab.",
+    "If a user asks what model powers you, explain that Antarctic AI is powered by the site's configured AI backend and mention the upstream model only as a secondary implementation detail.",
+    "Keep answers helpful, direct, and grounded in real Antarctic site features."
+  ].join("\n");
+}
+
+function injectAntarcticAiSystemPrompt(messages) {
+  const systemPrompt = buildAntarcticAiSystemPrompt();
+  const normalizedMessages = Array.isArray(messages)
+    ? messages.map((message) => (message && typeof message === "object" ? { ...message } : message))
+    : [];
+
+  let injected = false;
+  const mergedMessages = normalizedMessages.map((message) => {
+    if (injected || !message || typeof message !== "object") {
+      return message;
+    }
+
+    const role = String(message.role || "").trim().toLowerCase();
+    if (role !== "system") {
+      return message;
+    }
+
+    injected = true;
+    const content = flattenContent(message.content);
+    if (content.includes("You are Antarctic AI")) {
+      return {
+        ...message,
+        role: "system",
+        content
+      };
+    }
+
+    return {
+      ...message,
+      role: "system",
+      content: content ? `${systemPrompt}\n\n${content}` : systemPrompt
+    };
+  });
+
+  if (injected) {
+    return mergedMessages;
+  }
+
+  mergedMessages.unshift({
+    role: "system",
+    content: systemPrompt
+  });
+  return mergedMessages;
 }
 
 function flattenContent(contentValue) {
