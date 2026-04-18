@@ -1,0 +1,19 @@
+[Unit]
+Description=Antarctic backend runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/Antarctic-Backend
+ExecStart=/opt/Antarctic-Backend/start.sh
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

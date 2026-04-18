@@ -375,6 +375,52 @@ function toWebSocketUrl(originValue, pathValue) {
   }
 }
 
+function resolveConfiguredProxyBase(config, backendOrigin) {
+  const configuredProxyBase = String(config.proxyBaseUrl || "").trim();
+  if (!configuredProxyBase) {
+    return String(backendOrigin || "").trim();
+  }
+
+  let candidate = configuredProxyBase;
+  if (!/^https?:\/\//i.test(candidate)) {
+    candidate = `https://${candidate}`;
+  }
+
+  try {
+    return new URL(candidate).origin;
+  } catch {
+    return String(backendOrigin || "").trim();
+  }
+}
+
+function buildPublicProxyServices(config, backendOrigin) {
+  const normalizedBackendOrigin = String(backendOrigin || "").trim();
+  const normalizedWispPath = normalizeWebSocketPath(SCRAMJET_WISP_PATH);
+  return {
+    proxy: "/api/proxy/fetch",
+    proxyFetch: "/api/proxy/fetch",
+    proxyRequest: "/api/proxy/request",
+    proxyBase: resolveConfiguredProxyBase(config, normalizedBackendOrigin),
+    proxyMode: "http-fallback",
+    proxyTransport: "http-fallback",
+    wispPath: normalizedWispPath,
+    wispUrl: normalizedBackendOrigin ? toWebSocketUrl(normalizedBackendOrigin, normalizedWispPath) : ""
+  };
+}
+
+function buildProxyHealthPayload(config, backendOrigin) {
+  const services = buildPublicProxyServices(config, backendOrigin);
+  return {
+    ok: true,
+    service: "backend",
+    transport: services.proxyTransport,
+    message: "Built-in web browsing is ready.",
+    proxyRequest: services.proxyRequest,
+    proxyFetch: services.proxyFetch,
+    wispUrl: services.wispUrl
+  };
+}
+
 function readString(env, key, fallback) {
   const value = env[key];
   if (typeof value === "string" && value.trim() !== "") {
@@ -921,15 +967,11 @@ async function routeRequest(req, res, config) {
   }
 
   if (url.pathname === "/api/proxy/health") {
+    const backendOrigin = requestOrigin(req);
     sendJson(
       res,
-      503,
-      {
-        ok: false,
-        service: "disabled",
-        transport: "disabled",
-        message: "Built-in web browsing is temporarily disabled."
-      },
+      200,
+      buildProxyHealthPayload(config, backendOrigin),
       config
     );
     return;
@@ -937,19 +979,7 @@ async function routeRequest(req, res, config) {
 
   if (url.pathname === "/api/config/public") {
     const backendOrigin = requestOrigin(req);
-    const configuredProxyBase = String(config.proxyBaseUrl || "").trim();
-    let proxyBase = "";
-    if (configuredProxyBase) {
-      let candidate = configuredProxyBase;
-      if (!/^https?:\/\//i.test(candidate)) {
-        candidate = `https://${candidate}`;
-      }
-      try {
-        proxyBase = new URL(candidate).origin;
-      } catch {
-        proxyBase = "";
-      }
-    }
+    const proxyServices = buildPublicProxyServices(config, backendOrigin);
 
     sendJson(
       res,
@@ -958,14 +988,7 @@ async function routeRequest(req, res, config) {
         ok: true,
         backendBase: backendOrigin,
         services: {
-          proxy: "",
-          proxyFetch: "",
-          proxyRequest: "",
-          proxyBase,
-          proxyMode: "disabled",
-          proxyTransport: "disabled",
-          wispPath: "",
-          wispUrl: "",
+          ...proxyServices,
           aiChat: "/api/ai/chat",
           defaultAiModel: config.ollamaModel,
           accountSession: "/api/account/session",
@@ -1514,6 +1537,16 @@ async function routeRequest(req, res, config) {
     }
 
     const normalized = normalizeAiPayload(parsed, config.ollamaModel);
+    const directResponse = buildAntarcticAiDirectResponse(normalized.messages);
+    if (directResponse) {
+      if (normalized.stream) {
+        sendInlineAiStream(res, config, normalized.model, directResponse, "inline");
+      } else {
+        sendJson(res, 200, buildAssistantPayload(normalized.model, directResponse, "inline"), config);
+      }
+      return;
+    }
+
     const baseUrl = config.ollamaBaseUrl.replace(/\/+$/, "");
     const aiTimeoutMs = Math.max(15_000, Number(config.aiRequestTimeoutMs) || 120_000);
     const chatTimeoutMs = aiTimeoutMs;
@@ -2295,6 +2328,8 @@ function normalizeAiPayload(payload, fallbackModel) {
     }
   }
 
+  normalized.messages = injectAntarcticAiSystemPrompt(normalized.messages);
+
   if (typeof normalized.stream !== "boolean") {
     normalized.stream = false;
   }
@@ -2332,6 +2367,62 @@ function normalizeAiPayload(payload, fallbackModel) {
   return normalized;
 }
 
+function buildAntarcticAiSystemPrompt() {
+  return [
+    "You are Antarctic AI, the built-in assistant for Antarctic Games.",
+    "When a user asks who you are, identify yourself as Antarctic AI first.",
+    "For identity questions, start the reply with: I am Antarctic AI, the built-in assistant for Antarctic Games.",
+    "Do not introduce yourself as Qwen, Tongyi Lab, or any other upstream model or lab.",
+    "If a user asks what model powers you, explain that Antarctic AI is powered by the site's configured AI backend and mention the upstream model only as a secondary implementation detail.",
+    "Keep answers helpful, direct, and grounded in real Antarctic site features."
+  ].join("\n");
+}
+
+function injectAntarcticAiSystemPrompt(messages) {
+  const systemPrompt = buildAntarcticAiSystemPrompt();
+  const normalizedMessages = Array.isArray(messages)
+    ? messages.map((message) => (message && typeof message === "object" ? { ...message } : message))
+    : [];
+
+  let injected = false;
+  const mergedMessages = normalizedMessages.map((message) => {
+    if (injected || !message || typeof message !== "object") {
+      return message;
+    }
+
+    const role = String(message.role || "").trim().toLowerCase();
+    if (role !== "system") {
+      return message;
+    }
+
+    injected = true;
+    const content = flattenContent(message.content);
+    if (content.includes("You are Antarctic AI")) {
+      return {
+        ...message,
+        role: "system",
+        content
+      };
+    }
+
+    return {
+      ...message,
+      role: "system",
+      content: content ? `${systemPrompt}\n\n${content}` : systemPrompt
+    };
+  });
+
+  if (injected) {
+    return mergedMessages;
+  }
+
+  mergedMessages.unshift({
+    role: "system",
+    content: systemPrompt
+  });
+  return mergedMessages;
+}
+
 function flattenContent(contentValue) {
   if (typeof contentValue === "string") {
     return contentValue.trim();
@@ -2352,6 +2443,54 @@ function flattenContent(contentValue) {
   if (contentValue && typeof contentValue === "object") {
     if (typeof contentValue.text === "string") return contentValue.text.trim();
     if (typeof contentValue.content === "string") return contentValue.content.trim();
+  }
+
+  return "";
+}
+
+function getLatestUserAiMessage(messages) {
+  if (!Array.isArray(messages)) {
+    return "";
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || typeof message !== "object") {
+      continue;
+    }
+    if (String(message.role || "").trim().toLowerCase() !== "user") {
+      continue;
+    }
+
+    const content = flattenContent(message.content);
+    if (content) {
+      return content;
+    }
+  }
+
+  return "";
+}
+
+function buildAntarcticAiDirectResponse(messages) {
+  const latestUserMessage = getLatestUserAiMessage(messages).toLowerCase();
+  if (!latestUserMessage) {
+    return "";
+  }
+
+  if (
+    /\bwho are you\b/.test(latestUserMessage) ||
+    /\bwhat are you\b/.test(latestUserMessage) ||
+    /\bwhat(?:'s| is) your name\b/.test(latestUserMessage)
+  ) {
+    return "I am Antarctic AI, the built-in assistant for Antarctic Games. I can help with games on the site, browsing, and general questions.";
+  }
+
+  if (
+    /\bwhat model are you\b/.test(latestUserMessage) ||
+    /\bwhat model powers you\b/.test(latestUserMessage) ||
+    /\bwhich model are you\b/.test(latestUserMessage)
+  ) {
+    return "I am Antarctic AI, the built-in assistant for Antarctic Games. I am powered by the site's configured AI backend.";
   }
 
   return "";
@@ -2445,6 +2584,21 @@ async function postJsonWithTimeout(targetUrl, payload, timeoutMs) {
       error: timeoutLike ? "AI upstream request timed out." : message
     };
   }
+}
+
+function sendInlineAiStream(res, config, model, text, source) {
+  addCors(res, config);
+  addSecurityHeaders(res);
+  res.writeHead(200, {
+    "content-type": "application/x-ndjson; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    "x-accel-buffering": "no"
+  });
+  res.write(`${JSON.stringify({ ok: true, delta: String(text || ""), done: false })}\n`);
+  res.write(
+    `${JSON.stringify({ ok: true, done: true, source: source || "inline", model: String(model || "") })}\n`
+  );
+  res.end();
 }
 
 async function streamAiChat(req, res, config, payload, targetUrl, timeoutMs) {

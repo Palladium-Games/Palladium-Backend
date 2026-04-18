@@ -58,7 +58,7 @@ test("frontend shell ships the built-in antarctic routes with the bundled proxy 
   assert.match(shellPage, /antarctic:\/\/settings/);
   assert.match(shellPage, /scram\/scramjet\.all\.js/);
   assert.match(shellPage, /baremux\/index\.js/);
-  assert.match(shellPage, /Built-in web browsing is temporarily disabled/);
+  assert.match(shellPage, /Preparing built-in web browsing/);
 });
 
 test("frontend root only keeps one app shell html entrypoint", () => {
@@ -111,6 +111,25 @@ test("repo root no longer needs duplicate static page copies", () => {
 test("backend ships user and agent guides for the trimmed API surface", () => {
   assert.ok(fs.existsSync(path.join(BACKEND_DIR, "docs", "user-guide.md")));
   assert.ok(fs.existsSync(path.join(BACKEND_DIR, "docs", "agent-guide.md")));
+  assert.ok(fs.existsSync(path.join(BACKEND_DIR, "docs", "main-site-cutover.md")));
+});
+
+test("backend ships main-site deployment templates for backend-served hosting", () => {
+  const serviceTemplatePath = path.join(BACKEND_DIR, "deploy", "antarctic-backend.service");
+  const nginxTemplatePath = path.join(BACKEND_DIR, "deploy", "nginx", "antarctic.games.conf");
+
+  assert.ok(fs.existsSync(serviceTemplatePath));
+  assert.ok(fs.existsSync(nginxTemplatePath));
+
+  const serviceTemplate = fs.readFileSync(serviceTemplatePath, "utf8");
+  const nginxTemplate = fs.readFileSync(nginxTemplatePath, "utf8");
+  const cutoverGuide = fs.readFileSync(path.join(BACKEND_DIR, "docs", "main-site-cutover.md"), "utf8");
+
+  assert.match(serviceTemplate, /ExecStart=\/opt\/Antarctic-Backend\/start\.sh/);
+  assert.match(nginxTemplate, /proxy_pass http:\/\/127\.0\.0\.1:8080/);
+  assert.match(nginxTemplate, /server_name antarctic\.games www\.antarctic\.games api\.antarctic\.games;/);
+  assert.match(cutoverGuide, /FRONTEND_STATIC_DIR=\/opt\/Antarctic-Games/);
+  assert.match(cutoverGuide, /Rollback:/);
 });
 
 test("config template documents optional frontend passthrough without reintroducing hosted games", () => {

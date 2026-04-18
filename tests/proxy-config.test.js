@@ -9,7 +9,7 @@ const { spawn } = require("node:child_process");
 
 const BACKEND_DIR = path.resolve(__dirname, "..");
 
-test("backend reports that built-in web browsing is disabled", async (t) => {
+test("backend reports that built-in web browsing is ready over the fallback proxy contract", async (t) => {
   const port = await getOpenPort();
   const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "antarctic-proxy-config-"));
   const configPath = path.join(tempDir, "palladium.env");
@@ -54,13 +54,16 @@ test("backend reports that built-in web browsing is disabled", async (t) => {
   await waitForServer(`${backendBase}/health`, output);
 
   const proxyHealthResponse = await fetch(`${backendBase}/api/proxy/health`);
-  assert.equal(proxyHealthResponse.status, 503);
+  assert.equal(proxyHealthResponse.status, 200);
 
   const proxyHealth = await proxyHealthResponse.json();
-  assert.equal(proxyHealth.ok, false);
-  assert.equal(proxyHealth.service, "disabled");
-  assert.equal(proxyHealth.transport, "disabled");
-  assert.match(proxyHealth.message, /temporarily disabled/i);
+  assert.equal(proxyHealth.ok, true);
+  assert.equal(proxyHealth.service, "backend");
+  assert.equal(proxyHealth.transport, "http-fallback");
+  assert.equal(proxyHealth.message, "Built-in web browsing is ready.");
+  assert.equal(proxyHealth.proxyFetch, "/api/proxy/fetch");
+  assert.equal(proxyHealth.proxyRequest, "/api/proxy/request");
+  assert.equal(proxyHealth.wispUrl, `ws://127.0.0.1:${port}/wisp/`);
 
   const configResponse = await fetch(`${backendBase}/api/config/public`);
   assert.equal(configResponse.status, 200);
@@ -68,13 +71,14 @@ test("backend reports that built-in web browsing is disabled", async (t) => {
   const payload = await configResponse.json();
   assert.equal(payload.ok, true);
   assert.equal(payload.backendBase, backendBase);
-  assert.equal(payload.services.proxyMode, "disabled");
-  assert.equal(payload.services.proxyTransport, "disabled");
-  assert.equal(payload.services.wispPath, "");
-  assert.equal(payload.services.wispUrl, "");
-  assert.equal(payload.services.proxy, "");
-  assert.equal(payload.services.proxyFetch, "");
-  assert.equal(payload.services.proxyRequest, "");
+  assert.equal(payload.services.proxyBase, backendBase);
+  assert.equal(payload.services.proxyMode, "http-fallback");
+  assert.equal(payload.services.proxyTransport, "http-fallback");
+  assert.equal(payload.services.wispPath, "/wisp/");
+  assert.equal(payload.services.wispUrl, `ws://127.0.0.1:${port}/wisp/`);
+  assert.equal(payload.services.proxy, "/api/proxy/fetch");
+  assert.equal(payload.services.proxyFetch, "/api/proxy/fetch");
+  assert.equal(payload.services.proxyRequest, "/api/proxy/request");
   assert.equal(payload.services.aiChat, "/api/ai/chat");
   assert.equal(payload.services.accountSession, "/api/account/session");
   assert.equal(payload.services.communityBootstrap, "/api/community/bootstrap");
