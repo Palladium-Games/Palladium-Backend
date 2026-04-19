@@ -5,7 +5,6 @@ const fsp = require("node:fs/promises");
 const http = require("node:http");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
-const { server: wispServer } = require("@mercuryworkshop/wisp-js/server");
 const { createCommunityStore } = require("./services/community-store-factory");
 
 const ROOT_DIR = __dirname;
@@ -19,11 +18,6 @@ const DEFAULT_DISCORD_WIDGET_URL = "https://discord.com/api/guilds/1479914434460
 const DEFAULT_DISCORD_INVITE_URL = "https://discord.gg/FNACSCcE26";
 const DEFAULT_ACCOUNT_SQLITE_PATH = path.join(ROOT_DIR, "target", "antarctic-community.sqlite");
 const DEFAULT_SESSION_COOKIE_NAME = "antarctic_session";
-const MAX_PROXY_REQUEST_BODY_BYTES = 5 * 1024 * 1024;
-const PROXY_REQUEST_HEADER_METHOD = "x-antarctic-proxy-method";
-const PROXY_REQUEST_HEADER_HEADERS = "x-antarctic-proxy-headers";
-const SCRAMJET_SERVICE_PREFIX = "/service/scramjet";
-const SCRAMJET_WISP_PATH = "/wisp/";
 const STATIC_CONTENT_TYPES = Object.freeze({
   ".css": "text/css; charset=utf-8",
   ".gif": "image/gif",
@@ -58,7 +52,6 @@ const NO_CACHE_STATIC_BASENAMES = new Set([
   "styles.css",
   "sw.js"
 ]);
-const PROXY_ALLOWED_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 
 const PROVIDER_SIGNATURES = [
   {
@@ -192,7 +185,6 @@ async function main() {
     requestTimeoutMs: readInt(env, "REQUEST_TIMEOUT_MS", 25_000),
     maxRequestBodyBytes: readInt(env, "MAX_REQUEST_BODY_BYTES", 131072),
     aiRequestTimeoutMs: readInt(env, "AI_REQUEST_TIMEOUT_MS", 120_000),
-    proxyBaseUrl: readString(env, "PROXY_BASE_URL", ""),
     frontendStaticDir: resolveOptionalPath(readString(env, "FRONTEND_STATIC_DIR", "")),
     accountProvider: readString(env, "ACCOUNT_PROVIDER", "auto"),
     accountSqlitePath: resolvePath(readString(env, "ACCOUNT_SQLITE_PATH", DEFAULT_ACCOUNT_SQLITE_PATH)),
@@ -375,51 +367,11 @@ function toWebSocketUrl(originValue, pathValue) {
   }
 }
 
-function resolveConfiguredProxyBase(config, backendOrigin) {
-  const configuredProxyBase = String(config.proxyBaseUrl || "").trim();
-  if (!configuredProxyBase) {
-    return String(backendOrigin || "").trim();
-  }
 
-  let candidate = configuredProxyBase;
-  if (!/^https?:\/\//i.test(candidate)) {
-    candidate = `https://${candidate}`;
-  }
 
-  try {
-    return new URL(candidate).origin;
-  } catch {
-    return String(backendOrigin || "").trim();
-  }
-}
 
-function buildPublicProxyServices(config, backendOrigin) {
-  const normalizedBackendOrigin = String(backendOrigin || "").trim();
-  const normalizedWispPath = normalizeWebSocketPath(SCRAMJET_WISP_PATH);
-  return {
-    proxy: "/api/proxy/fetch",
-    proxyFetch: "/api/proxy/fetch",
-    proxyRequest: "/api/proxy/request",
-    proxyBase: resolveConfiguredProxyBase(config, normalizedBackendOrigin),
-    proxyMode: "http-fallback",
-    proxyTransport: "http-fallback",
-    wispPath: normalizedWispPath,
-    wispUrl: normalizedBackendOrigin ? toWebSocketUrl(normalizedBackendOrigin, normalizedWispPath) : ""
-  };
-}
 
-function buildProxyHealthPayload(config, backendOrigin) {
-  const services = buildPublicProxyServices(config, backendOrigin);
-  return {
-    ok: true,
-    service: "backend",
-    transport: services.proxyTransport,
-    message: "Built-in web browsing is ready.",
-    proxyRequest: services.proxyRequest,
-    proxyFetch: services.proxyFetch,
-    wispUrl: services.wispUrl
-  };
-}
+
 
 function readString(env, key, fallback) {
   const value = env[key];
@@ -889,10 +841,6 @@ async function startHttpServer(config) {
     }
   });
 
-  server.on("upgrade", (req, socket, head) => {
-    handleUpgradeRequest(req, socket, head);
-  });
-
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(config.port, config.host, resolve);
@@ -901,32 +849,7 @@ async function startHttpServer(config) {
   managed.httpServer = server;
 }
 
-function handleUpgradeRequest(req, socket, head) {
-  let pathname = "";
 
-  try {
-    const parsed = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    pathname = parsed.pathname || "";
-    if (pathname === SCRAMJET_WISP_PATH.slice(0, -1)) {
-      req.url = SCRAMJET_WISP_PATH;
-      pathname = SCRAMJET_WISP_PATH;
-    }
-  } catch {
-    pathname = "";
-  }
-
-  if (pathname === SCRAMJET_WISP_PATH) {
-    wispServer.routeRequest(req, socket, head);
-    return;
-  }
-
-  try {
-    socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
-  } catch {
-    // Ignore socket write failures while rejecting unsupported upgrades.
-  }
-  socket.destroy();
-}
 
 async function routeRequest(req, res, config) {
   if (!req.url || !req.method) {
@@ -966,21 +889,8 @@ async function routeRequest(req, res, config) {
     return;
   }
 
-  if (url.pathname === "/api/proxy/health") {
-    const backendOrigin = requestOrigin(req);
-    sendJson(
-      res,
-      200,
-      buildProxyHealthPayload(config, backendOrigin),
-      config
-    );
-    return;
-  }
-
   if (url.pathname === "/api/config/public") {
     const backendOrigin = requestOrigin(req);
-    const proxyServices = buildPublicProxyServices(config, backendOrigin);
-
     sendJson(
       res,
       200,
@@ -988,7 +898,6 @@ async function routeRequest(req, res, config) {
         ok: true,
         backendBase: backendOrigin,
         services: {
-          ...proxyServices,
           aiChat: "/api/ai/chat",
           defaultAiModel: config.ollamaModel,
           accountSession: "/api/account/session",
@@ -1402,120 +1311,6 @@ async function routeRequest(req, res, config) {
     return;
   }
 
-  if (url.pathname === "/api/proxy/request" && method === "POST") {
-    const target = normalizeUserUrl(url.searchParams.get("url") || "");
-    if (!target) {
-      sendJson(res, 400, { ok: false, error: "Missing or invalid url parameter" }, config);
-      return;
-    }
-
-    const upstreamMethod = normalizeProxyMethod(req.headers[PROXY_REQUEST_HEADER_METHOD]);
-    if (!upstreamMethod) {
-      sendJson(res, 400, { ok: false, error: "Missing or invalid upstream method." }, config);
-      return;
-    }
-
-    const upstreamHeaders = parseProxyRequestHeaders(req.headers[PROXY_REQUEST_HEADER_HEADERS]);
-    let upstreamBody = null;
-    if (!["GET", "HEAD"].includes(upstreamMethod)) {
-      try {
-        upstreamBody = await readRequestBody(req, Math.max(config.maxRequestBodyBytes, MAX_PROXY_REQUEST_BODY_BYTES));
-      } catch (error) {
-        sendJson(res, 413, { ok: false, error: String(error?.message || "Proxy request body too large.") }, config);
-        return;
-      }
-    }
-
-    try {
-      const response = await fetch(target, {
-        method: upstreamMethod,
-        headers: upstreamHeaders,
-        body: upstreamBody && upstreamBody.length ? upstreamBody : undefined,
-        redirect: "manual",
-        signal: AbortSignal.timeout(Math.max(5_000, config.requestTimeoutMs))
-      });
-
-      const responseHeaders = collectUpstreamHeaders(response.headers);
-      const finalUrl = response.url || target;
-      responseHeaders["x-antarctic-final-url"] = finalUrl;
-      responseHeaders["x-palladium-final-url"] = finalUrl;
-      responseHeaders["x-antarctic-proxy-status-text"] = response.statusText || "";
-      responseHeaders["x-palladium-proxy-status-text"] = response.statusText || "";
-
-      if (upstreamMethod === "HEAD" || [101, 204, 205, 304].includes(response.status)) {
-        sendHead(res, response.status, responseHeaders, config);
-        return;
-      }
-
-      const body = Buffer.from(await response.arrayBuffer());
-      sendBinary(res, response.status, body, responseHeaders, config);
-    } catch (error) {
-      sendJson(
-        res,
-        502,
-        { ok: false, error: String(error?.message || "Proxy request failed.") },
-        config
-      );
-    }
-    return;
-  }
-
-  if (url.pathname === "/api/proxy/fetch" && (method === "GET" || method === "HEAD")) {
-    const target = normalizeUserUrl(url.searchParams.get("url") || "");
-    if (!target) {
-      sendText(res, 400, "Missing or invalid url parameter", config);
-      return;
-    }
-
-    const upstreamMethod = method === "HEAD" ? "HEAD" : "GET";
-    const requestHeaders = {
-      "user-agent": BROWSER_FETCH_USER_AGENT,
-      accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/*,*/*;q=0.8",
-      "accept-language": "en-US,en;q=0.9"
-    };
-
-    let response = await fetch(target, {
-      method: upstreamMethod,
-      headers: requestHeaders,
-      redirect: "follow",
-      signal: AbortSignal.timeout(config.requestTimeoutMs)
-    });
-
-    if (method === "HEAD" && [400, 403, 405, 501].includes(response.status)) {
-      try {
-        response = await fetch(target, {
-          method: "GET",
-          headers: requestHeaders,
-          redirect: "follow",
-          signal: AbortSignal.timeout(config.requestTimeoutMs)
-        });
-      } catch {
-        // Keep the original HEAD response.
-      }
-    }
-
-    if (method === "HEAD") {
-      if (response.body && typeof response.body.cancel === "function") {
-        try {
-          await response.body.cancel();
-        } catch {
-          // Ignore cancellation issues.
-        }
-      }
-      sendHeadFromUpstream(res, response, config);
-      return;
-    }
-
-    const body = Buffer.from(await response.arrayBuffer());
-    const headers = {
-      "content-type": response.headers.get("content-type") || "application/octet-stream",
-      "x-antarctic-final-url": response.url || target,
-      "x-palladium-final-url": response.url || target
-    };
-    sendBinary(res, response.status, body, headers, config);
-    return;
-  }
-
   if (url.pathname === "/api/ai/chat" && method === "POST") {
     let body;
     try {
@@ -1628,14 +1423,6 @@ async function tryServeFrontendStatic(req, res, config, pathname, headOnly) {
     return true;
   }
 
-  if (tryRedirectScramjetNavigation(req, res, config, pathname, headOnly)) {
-    return true;
-  }
-
-  if (tryServeScramjetIframeBootstrap(req, res, config, pathname, headOnly)) {
-    return true;
-  }
-
   if (!shouldServeFrontendShell(pathname)) {
     return false;
   }
@@ -1710,8 +1497,6 @@ function shouldServeFrontendShell(pathname) {
   if (
     lower === "/health" ||
     lower === "/link-check" ||
-    lower === SCRAMJET_WISP_PATH.slice(0, -1) ||
-    lower === SCRAMJET_WISP_PATH.replace(/\/+$/, "") ||
     lower === "/api" ||
     lower.startsWith("/api/") ||
     lower === "/service" ||
@@ -1722,27 +1507,9 @@ function shouldServeFrontendShell(pathname) {
   return path.extname(normalized) === "";
 }
 
-function isScramjetServicePath(pathname) {
-  const normalized = String(pathname || "").replace(/\/+$/, "");
-  return normalized === SCRAMJET_SERVICE_PREFIX || normalized.startsWith(`${SCRAMJET_SERVICE_PREFIX}/`);
-}
 
-function decodeScramjetTarget(pathname) {
-  if (!isScramjetServicePath(pathname)) {
-    return "";
-  }
 
-  const rawTarget = String(pathname || "").slice(SCRAMJET_SERVICE_PREFIX.length).replace(/^\/+/, "");
-  if (!rawTarget) {
-    return "";
-  }
 
-  try {
-    return normalizeUserUrl(decodeURIComponent(rawTarget));
-  } catch {
-    return "";
-  }
-}
 
 function isTopLevelHtmlNavigationRequest(req) {
   const accept = String(req && req.headers ? req.headers.accept || "" : "").toLowerCase();
@@ -1768,111 +1535,13 @@ function buildShellRedirectLocation(uri) {
   return `/?uri=${encodeURIComponent(String(uri || ""))}`;
 }
 
-function tryRedirectScramjetNavigation(req, res, config, pathname, headOnly) {
-  const target = decodeScramjetTarget(pathname);
-  if (!target || !isTopLevelHtmlNavigationRequest(req)) {
-    return false;
-  }
 
-  sendRedirect(res, 302, buildShellRedirectLocation(target), config, headOnly);
-  return true;
-}
 
-function isIframeHtmlNavigationRequest(req) {
-  const accept = String(req && req.headers ? req.headers.accept || "" : "").toLowerCase();
-  const destination = String(req && req.headers ? req.headers["sec-fetch-dest"] || "" : "").toLowerCase();
-  return destination === "iframe" || (!destination && accept.includes("text/html"));
-}
 
-function renderScramjetIframeBootstrap(target) {
-  const normalizedTarget = JSON.stringify(String(target || ""));
-  return [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '  <meta charset="utf-8" />',
-    '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
-    "  <title>Loading Proxy Page...</title>",
-    "  <style>",
-    "    html, body { height: 100%; margin: 0; }",
-    "    body { display: grid; place-items: center; background: #070b14; color: #dce9ff; font: 500 15px/1.5 system-ui, sans-serif; }",
-    "    .scramjet-bootstrap { padding: 20px 24px; border-radius: 18px; background: rgba(13, 19, 33, 0.9); border: 1px solid rgba(120, 160, 255, 0.18); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); max-width: 420px; text-align: center; }",
-    "    .scramjet-bootstrap strong { display: block; font-size: 18px; margin-bottom: 8px; }",
-    "    .scramjet-bootstrap span { color: rgba(220, 233, 255, 0.75); }",
-    "  </style>",
-    "</head>",
-    "<body>",
-    '  <div class="scramjet-bootstrap">',
-    "    <strong>Loading the proxied page...</strong>",
-    "    <span>Reconnecting the proxy runtime inside this frame.</span>",
-    "  </div>",
-    "  <script>",
-    "    (function () {",
-    `      var target = ${normalizedTarget};`,
-    '      var retryKey = "__antarctic_scramjet_boot";',
-    "      var current = new URL(window.location.href);",
-    '      var retries = Number(current.searchParams.get(retryKey) || "0");',
-    "      var finished = false;",
-    "      function finish() {",
-    "        if (finished) return true;",
-    "        finished = true;",
-    "        return false;",
-    "      }",
-    "      function reloadThroughServiceWorker() {",
-    "        if (finish()) return;",
-    "        var next = new URL(window.location.href);",
-    "        next.searchParams.set(retryKey, String(retries + 1));",
-    "        window.location.replace(next.toString());",
-    "      }",
-    "      function escapeToShell() {",
-    "        if (finish()) return;",
-    "        var shellUrl = '/?uri=' + encodeURIComponent(target);",
-    "        try {",
-    "          if (window.top && window.top !== window) {",
-    "            window.top.location.replace(shellUrl);",
-    "            return;",
-    "          }",
-    "        } catch (error) {",
-    "          // Ignore cross-context access issues and fall back to this frame.",
-    "        }",
-    "        window.location.replace(shellUrl);",
-    "      }",
-    "      function startRetry() {",
-    "        if (navigator.serviceWorker && navigator.serviceWorker.controller) {",
-    "          reloadThroughServiceWorker();",
-    "          return;",
-    "        }",
-    "        if (navigator.serviceWorker) {",
-    "          navigator.serviceWorker.addEventListener('controllerchange', reloadThroughServiceWorker, { once: true });",
-    "          navigator.serviceWorker.ready.then(reloadThroughServiceWorker).catch(function () {",
-    "            if (retries >= 1) escapeToShell();",
-    "          });",
-    "        }",
-    "        window.setTimeout(function () {",
-    "          if (retries >= 1) {",
-    "            escapeToShell();",
-    "            return;",
-    "          }",
-    "          reloadThroughServiceWorker();",
-    "        }, 1200);",
-    "      }",
-    "      startRetry();",
-    "    })();",
-    "  </script>",
-    "</body>",
-    "</html>"
-  ].join("\n");
-}
 
-function tryServeScramjetIframeBootstrap(req, res, config, pathname, headOnly) {
-  const target = decodeScramjetTarget(pathname);
-  if (!target || !isIframeHtmlNavigationRequest(req)) {
-    return false;
-  }
 
-  sendHtml(res, 200, renderScramjetIframeBootstrap(target), config, headOnly);
-  return true;
-}
+
+
 
 function shouldDisableStaticCache(filePath, contentType, config) {
   if (contentType.startsWith("text/html") || NO_CACHE_STATIC_BASENAMES.has(path.basename(filePath))) {
@@ -2892,61 +2561,11 @@ function readSessionToken(req) {
   return String(cookies[DEFAULT_SESSION_COOKIE_NAME] || "").trim();
 }
 
-function normalizeProxyMethod(value) {
-  const normalized = String(value || "").trim().toUpperCase();
-  return PROXY_ALLOWED_METHODS.has(normalized) ? normalized : "";
-}
 
-function parseProxyRequestHeaders(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return {};
-  }
 
-  let parsed = {};
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return {};
-  }
 
-  const headers = {};
-  for (const [key, entryValue] of Object.entries(parsed || {})) {
-    const headerName = String(key || "").trim().toLowerCase();
-    if (!headerName || shouldBlockProxyHeader(headerName)) {
-      continue;
-    }
 
-    const normalizedValue = Array.isArray(entryValue)
-      ? entryValue.map((item) => String(item == null ? "" : item)).join(", ")
-      : String(entryValue == null ? "" : entryValue);
-    if (!normalizedValue) {
-      continue;
-    }
 
-    headers[headerName] = normalizedValue;
-  }
-
-  return headers;
-}
-
-function shouldBlockProxyHeader(headerName) {
-  return (
-    !headerName ||
-    headerName === "connection" ||
-    headerName === "content-length" ||
-    headerName === "cookie" ||
-    headerName === "host" ||
-    headerName === "origin" ||
-    headerName === "referer" ||
-    headerName === "transfer-encoding" ||
-    headerName === "upgrade" ||
-    headerName.startsWith("proxy-") ||
-    headerName.startsWith("sec-") ||
-    headerName.startsWith("x-antarctic-") ||
-    headerName.startsWith("x-palladium-")
-  );
-}
 
 function shouldBlockUpstreamResponseHeader(headerName) {
   return (
@@ -2954,8 +2573,6 @@ function shouldBlockUpstreamResponseHeader(headerName) {
     headerName === "connection" ||
     headerName === "content-length" ||
     headerName === "keep-alive" ||
-    headerName === "proxy-authenticate" ||
-    headerName === "proxy-authorization" ||
     headerName === "te" ||
     headerName === "trailer" ||
     headerName === "transfer-encoding" ||
@@ -3069,8 +2686,6 @@ function addCors(res, config) {
       "authorization",
       "x-antarctic-session",
       "x-palladium-session",
-      PROXY_REQUEST_HEADER_METHOD,
-      PROXY_REQUEST_HEADER_HEADERS
     ].join(",")
   );
 }

@@ -8,17 +8,10 @@
     "start": "node apps.js",
     "start:dev": "SITE_PORT=3000 node apps.js",
     "migrate:supabase": "node scripts/migrate-community-to-supabase.js",
-    "refresh:frontend-proxy": "node scripts/sync-frontend-proxy-assets.js --clean",
-    "reinstall:frontend-proxy": "node scripts/sync-frontend-proxy-assets.js --clean --reinstall",
-    "sync:frontend-proxy": "node scripts/sync-frontend-proxy-assets.js",
     "test": "node --test tests/*.test.js",
     "verify": "node scripts/verify.js && npm run test"
   },
   "dependencies": {
-    "@mercuryworkshop/bare-mux": "^2.1.8",
-    "@mercuryworkshop/libcurl-transport": "^1.5.2",
-    "@mercuryworkshop/scramjet": "https://github.com/MercuryWorkshop/scramjet/releases/download/latest/mercuryworkshop-scramjet-2.0.0-alpha.tgz",
-    "@mercuryworkshop/wisp-js": "^0.4.1",
     "pg": "^8.20.0",
     "sql.js": "^1.14.1",
     "ws": "^8.19.0"
