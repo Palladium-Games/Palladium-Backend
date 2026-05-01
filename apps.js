@@ -1417,12 +1417,33 @@ async function tryServeFrontendStatic(req, res, config, pathname, headOnly) {
     return false;
   }
 
+  const cdnRewriteMatch = String(pathname || "").match(/^\/games\/([^/]+)\/_cdn\/(.+)$/);
+  if (cdnRewriteMatch) {
+    const rewritePath = `/games-cdn-assets/${cdnRewriteMatch[1]}/${cdnRewriteMatch[2]}`;
+    const rewrittenMatch = await resolveFrontendStaticPath(rootDir, rewritePath);
+    if (rewrittenMatch) {
+      await sendStaticFile(res, rewrittenMatch, config, headOnly);
+      return true;
+    }
+  }
+
   const directMatch = await resolveFrontendStaticPath(rootDir, pathname);
   if (directMatch) {
     await sendStaticFile(res, directMatch, config, headOnly);
     return true;
   }
 
+ if (tryRedirectScramjetNavigation(req, res, config, pathname, headOnly)) {
+    return true;
+  }
+
+  if (tryServeScramjetIframeBootstrap(req, res, config, pathname, headOnly)) {
+    return true;
+  }
+
+  if (await tryServeScramjetResource(req, res, config, pathname, headOnly)) {
+    return true;
+  }
   if (!shouldServeFrontendShell(pathname)) {
     return false;
   }
@@ -1542,6 +1563,70 @@ function buildShellRedirectLocation(uri) {
 
 
 
+
+async function tryServeScramjetResource(req, res, config, pathname, headOnly) {
+  const target = decodeScramjetTarget(pathname);
+  if (!target) {
+    return false;
+  }
+
+  const method = String(req.method || "GET").toUpperCase();
+  const requestHeaders = {
+    "user-agent": BROWSER_FETCH_USER_AGENT,
+    accept: req.headers.accept || "*/*",
+    "accept-language": req.headers["accept-language"] || "en-US,en;q=0.9"
+  };
+
+  if (req.headers["sec-fetch-dest"]) {
+    requestHeaders["sec-fetch-dest"] = req.headers["sec-fetch-dest"];
+  }
+  if (req.headers["sec-fetch-mode"]) {
+    requestHeaders["sec-fetch-mode"] = req.headers["sec-fetch-mode"];
+  }
+  if (req.headers["sec-fetch-site"]) {
+    requestHeaders["sec-fetch-site"] = req.headers["sec-fetch-site"];
+  }
+  if (req.headers.referer) {
+    requestHeaders.referer = req.headers.referer;
+  }
+
+  try {
+    const response = await fetch(target, {
+      method: method,
+      headers: requestHeaders,
+      redirect: "follow",
+      signal: AbortSignal.timeout(Math.max(5_000, config.requestTimeoutMs || 15_000))
+    });
+
+    const body = Buffer.from(await response.arrayBuffer());
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+
+    const responseHeaders = {
+      "content-type": contentType,
+      "content-length": String(body.length),
+      "x-antarctic-final-url": response.url || target,
+      "x-palladium-final-url": response.url || target,
+      "cache-control": "no-cache"
+    };
+
+    const varyHeaders = ["x-antarctic-final-url", "x-palladium-final-url", "content-type", "content-length"];
+    for (const [key, value] of response.headers.entries()) {
+      if (!varyHeaders.includes(key.toLowerCase())) {
+        responseHeaders[key] = value;
+      }
+    }
+
+    if (headOnly || method === "HEAD") {
+      sendHead(res, response.status, responseHeaders, config);
+    } else {
+      sendBinary(res, response.status, body, responseHeaders, config);
+    }
+    return true;
+  } catch (error) {
+    sendJson(res, 502, { ok: false, error: String(error?.message || "Scramjet resource fetch failed."), url: target }, config);
+    return true;
+  }
+}
 
 function shouldDisableStaticCache(filePath, contentType, config) {
   if (contentType.startsWith("text/html") || NO_CACHE_STATIC_BASENAMES.has(path.basename(filePath))) {

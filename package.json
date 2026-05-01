@@ -12,6 +12,10 @@
     "verify": "node scripts/verify.js && npm run test"
   },
   "dependencies": {
+    "@mercuryworkshop/bare-mux": "^2.1.8",
+    "@mercuryworkshop/libcurl-transport": "^1.5.2",
+    "@mercuryworkshop/scramjet": "^2.0.2-alpha",
+    "@mercuryworkshop/wisp-js": "^0.4.1",
     "pg": "^8.20.0",
     "sql.js": "^1.14.1",
     "ws": "^8.19.0"
